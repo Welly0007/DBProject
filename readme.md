@@ -27,13 +27,9 @@ A simple Windows Forms application to manage workers and tasks in a SQL Server d
 1. Open SQL Server Management Studio (SSMS)
 2. Connect to your SQL Server instance
 3. Create a new database named `TaskWorkerDB`:
-   ```sql
-   CREATE DATABASE WorkerDB;
-   GO
-   ```
-4. Run the database schema script:
-   - Open the `initial-schema.sql` file provided with the project
-   - Execute the script against the `TaskWorkerDB` database
+4. right-click on `TaskWorkerDB` and click new query
+5. take the query from scheme directory and execute the `initial-schema.sql` file provided with the project
+6. NOTE: KEEP THE SERVER RUNNING WHEN USING THE SOFTWARE
 
 ### Step 2: Configure the Project
 
@@ -92,4 +88,4 @@ A simple Windows Forms application to manage workers and tasks in a SQL Server d
 
 ## Need Help?
 
-If you encounter any issues, please contact [Your Name/Email] for assistance.
+If you encounter any issues, please contact Walid for assistance.
