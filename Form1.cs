@@ -1,321 +1,568 @@
 using System;
 using System.Data;
+using System.Linq;
 using System.Windows.Forms;
-using Microsoft.Data.SqlClient;
+using TaskWorkerApp.Services;
 
 namespace TaskWorkerApp
 {
     public partial class Form1 : Form
     {
-        // Connection string to the SQL Server database
-        private readonly string _connectionString = 
-            "Server=WELLY-PC\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;";
-        
-        // UI Controls (nullable to avoid initialization warnings)
-        private TextBox? txtWorkerName;
-        private Button? btnAddWorker;  
-        private Button? btnUpdateWorker;
-        private Button? btnDeleteWorker;
-        private DataGridView? dgvWorkers;
-        private Label? lblStatus;
+        private readonly DatabaseService _databaseService;
+        private readonly WorkerService _workerService;
+        private readonly ClientService _clientService;
+        private readonly TaskCatalogService _taskCatalogService;
+
+        private TabControl? tabControl;
+
+        // Registration/Profile controls
+        private Panel? pnlMainMenu;
+        private Button? btnClient;
+        private Button? btnWorker;
+        private TabPage? tabClientProfile;
+        private TabPage? tabWorkerProfile;
+        private TabPage? tabTaskCatalog;
+
+        private int? _loggedInClientId; // Track the logged-in client ID
 
         public Form1()
         {
             InitializeComponent();
-            SetupUI(); // Dynamically sets up the UI controls
-            EnsureDatabaseCreated(); // Ensures the database and table exist
+            string schemaFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scheme", "initial-schema.sql");
+            _databaseService = new DatabaseService(
+                "Server=WELLY-PC\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
+                schemaFilePath);
+            _workerService = new WorkerService(_databaseService);
+            _clientService = new ClientService(_databaseService);
+            _taskCatalogService = new TaskCatalogService(_databaseService);
+
+            EnsureDatabaseCreated();
+            SetupMainMenu();
         }
 
-        private void SetupUI()
+        private void SetupMainMenu()
         {
-            // Configure form properties
-            this.Text = "Worker Management";
-            this.Size = new System.Drawing.Size(600, 400);
+            this.Text = "Task Worker App";
+            this.Size = new System.Drawing.Size(900, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // Create and configure UI controls
-            Label lblName = new Label
+            pnlMainMenu = new Panel { Dock = DockStyle.Fill };
+            btnClient = new Button { Text = "Client", Location = new System.Drawing.Point(200, 200), Size = new System.Drawing.Size(200, 60) };
+            btnWorker = new Button { Text = "Worker", Location = new System.Drawing.Point(500, 200), Size = new System.Drawing.Size(200, 60) };
+            btnClient.Click += (s, e) => ShowTabs("client");
+            btnWorker.Click += (s, e) => ShowTabs("worker");
+            pnlMainMenu.Controls.Add(btnClient);
+            pnlMainMenu.Controls.Add(btnWorker);
+            this.Controls.Add(pnlMainMenu);
+        }
+
+        private void ShowTabs(string userType)
+        {
+            this.Controls.Remove(pnlMainMenu);
+            tabControl = new TabControl { Dock = DockStyle.Fill };
+
+            if (userType == "client")
             {
-                Text = "Worker Name:",
-                Location = new System.Drawing.Point(20, 20),
-                Size = new System.Drawing.Size(100, 20)
+                tabClientProfile = new TabPage("Client Profile");
+                SetupClientProfileTab(tabClientProfile);
+                tabControl.TabPages.Add(tabClientProfile);
+
+                // Only add the Task Catalog tab if a client is logged in
+                if (_loggedInClientId != null)
+                {
+                    tabTaskCatalog = new TabPage("Task Catalog");
+                    SetupTaskCatalogTab(tabTaskCatalog);
+                    tabControl.TabPages.Add(tabTaskCatalog);
+                }
+            }
+            else
+            {
+                tabWorkerProfile = new TabPage("Worker Profile");
+                SetupWorkerProfileTab(tabWorkerProfile);
+                tabControl.TabPages.Add(tabWorkerProfile);
+            }
+
+            this.Controls.Add(tabControl);
+        }
+
+        private void AddBackToMenuButton(TabPage tab)
+        {
+            Button btnBack = new Button { Text = "Back to Main Menu", Location = new System.Drawing.Point(10, 10), Width = 150 };
+            btnBack.Click += (s, e) =>
+            {
+                this.Controls.Remove(tabControl!);
+                tabControl = null; // Reset tabControl to ensure proper reinitialization
+                this.Controls.Add(pnlMainMenu!);
+            };
+            tab.Controls.Add(btnBack);
+        }
+
+        private void SetupClientProfileTab(TabPage tab)
+        {
+            AddBackToMenuButton(tab);
+            int yOffset = 50;
+
+            // Login/Create buttons
+            Button btnLogin = new Button { Text = "Login", Location = new System.Drawing.Point(150, 30 + yOffset), Width = 120 };
+            Button btnCreate = new Button { Text = "Create Profile", Location = new System.Drawing.Point(300, 30 + yOffset), Width = 120 };
+
+            // Login controls
+            Label lblSelect = new Label { Text = "Select Client:", Location = new System.Drawing.Point(30, 80 + yOffset) };
+            ComboBox cmbClients = new ComboBox { Location = new System.Drawing.Point(150, 80 + yOffset), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            Button btnDoLogin = new Button { Text = "Login", Location = new System.Drawing.Point(370, 80 + yOffset), Width = 100 };
+
+            // Profile fields for creation
+            Label lblName = new Label { Text = "Name:", Location = new System.Drawing.Point(30, 140 + yOffset) };
+            TextBox txtName = new TextBox { Location = new System.Drawing.Point(170, 140 + yOffset), Width = 200 };
+            Label lblPhone = new Label { Text = "Phone:", Location = new System.Drawing.Point(30, 180 + yOffset) };
+            TextBox txtPhone = new TextBox { Location = new System.Drawing.Point(170, 180 + yOffset), Width = 200 };
+            Label lblEmail = new Label { Text = "Email:", Location = new System.Drawing.Point(30, 220 + yOffset) };
+            TextBox txtEmail = new TextBox { Location = new System.Drawing.Point(170, 220 + yOffset), Width = 200 };
+            Label lblAddress = new Label { Text = "Address:", Location = new System.Drawing.Point(30, 260 + yOffset) };
+            TextBox txtAddress = new TextBox { Location = new System.Drawing.Point(170, 260 + yOffset), Width = 200 };
+            Label lblPayment = new Label { Text = "Payment Info:", Location = new System.Drawing.Point(30, 300 + yOffset) };
+            TextBox txtPayment = new TextBox { Location = new System.Drawing.Point(170, 300 + yOffset), Width = 200 };
+            Button btnSubmit = new Button { Text = "Submit", Location = new System.Drawing.Point(170, 340 + yOffset) };
+
+            // Helper to show/hide login/create UI
+            void ShowLoginUI()
+            {
+                cmbClients.Items.Clear();
+                foreach (DataRow row in _clientService.GetAllClients().Rows)
+                    cmbClients.Items.Add(new ComboBoxItem(row["Name"]?.ToString() ?? "", (int)row["Id"]));
+
+                lblSelect.Visible = true;
+                cmbClients.Visible = true;
+                btnDoLogin.Visible = true;
+
+                lblName.Visible = false; txtName.Visible = false;
+                lblPhone.Visible = false; txtPhone.Visible = false;
+                lblEmail.Visible = false; txtEmail.Visible = false;
+                lblAddress.Visible = false; txtAddress.Visible = false;
+                lblPayment.Visible = false; txtPayment.Visible = false;
+                btnSubmit.Visible = false;
+            }
+            void ShowCreateUI()
+            {
+                lblSelect.Visible = false;
+                cmbClients.Visible = false;
+                btnDoLogin.Visible = false;
+
+                lblName.Visible = true; txtName.Visible = true;
+                lblPhone.Visible = true; txtPhone.Visible = true;
+                lblEmail.Visible = true; txtEmail.Visible = true;
+                lblAddress.Visible = true; txtAddress.Visible = true;
+                lblPayment.Visible = true; txtPayment.Visible = true;
+                btnSubmit.Visible = true;
+
+                txtName.Text = "";
+                txtPhone.Text = "";
+                txtEmail.Text = "";
+                txtAddress.Text = "";
+                txtPayment.Text = "";
+            }
+
+            // Initial state: show only login/create buttons
+            btnLogin.Click += (s, e) => ShowLoginUI();
+            btnCreate.Click += (s, e) => ShowCreateUI();
+
+            btnDoLogin.Click += (s, e) =>
+            {
+                if (cmbClients.SelectedItem is ComboBoxItem clientItem)
+                {
+                    var profile = _clientService.GetClientProfile(clientItem.Value);
+                    txtName.Text = profile.Name;
+                    txtPhone.Text = profile.Phone;
+                    txtEmail.Text = profile.Email;
+                    txtAddress.Text = profile.Address;
+                    txtPayment.Text = profile.PaymentInfo;
+
+                    _loggedInClientId = clientItem.Value; // Set the logged-in client ID
+                    MessageBox.Show("Logged in as " + profile.Name);
+
+                    // Refresh the tabs to show the Task Catalog
+                    this.Controls.Remove(tabControl!);
+                    ShowTabs("client");
+                }
             };
 
-            txtWorkerName = new TextBox
+            btnSubmit.Click += (s, e) =>
             {
-                Location = new System.Drawing.Point(120, 20),
-                Size = new System.Drawing.Size(200, 20)
+                if (string.IsNullOrWhiteSpace(txtName.Text) ||
+                    string.IsNullOrWhiteSpace(txtPhone.Text) ||
+                    string.IsNullOrWhiteSpace(txtEmail.Text))
+                {
+                    MessageBox.Show("Name, phone, and email are required.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                _clientService.SaveProfile(txtName.Text, txtPhone.Text, txtEmail.Text, txtAddress.Text, txtPayment.Text);
+                MessageBox.Show("Profile created. Please login.");
+                ShowLoginUI();
             };
 
-            btnAddWorker = new Button
+            // Add controls to tab
+            tab.Controls.Add(btnLogin);
+            tab.Controls.Add(btnCreate);
+            tab.Controls.Add(lblSelect); tab.Controls.Add(cmbClients); tab.Controls.Add(btnDoLogin);
+            tab.Controls.Add(lblName); tab.Controls.Add(txtName);
+            tab.Controls.Add(lblPhone); tab.Controls.Add(txtPhone);
+            tab.Controls.Add(lblEmail); tab.Controls.Add(txtEmail);
+            tab.Controls.Add(lblAddress); tab.Controls.Add(txtAddress);
+            tab.Controls.Add(lblPayment); tab.Controls.Add(txtPayment);
+            tab.Controls.Add(btnSubmit);
+
+            // Hide all except login/create buttons at start
+            lblSelect.Visible = false; cmbClients.Visible = false; btnDoLogin.Visible = false;
+            lblName.Visible = false; txtName.Visible = false;
+            lblPhone.Visible = false; txtPhone.Visible = false;
+            lblEmail.Visible = false; txtEmail.Visible = false;
+            lblAddress.Visible = false; txtAddress.Visible = false;
+            lblPayment.Visible = false; txtPayment.Visible = false;
+            btnSubmit.Visible = false;
+        }
+
+        private void SetupWorkerProfileTab(TabPage tab)
+        {
+            AddBackToMenuButton(tab);
+            int yOffset = 50;
+
+            // Worker selection or creation
+            Label lblSelect = new Label { Text = "Select Worker:", Location = new System.Drawing.Point(30, 30 + yOffset) };
+            ComboBox cmbWorkers = new ComboBox { Location = new System.Drawing.Point(150, 30 + yOffset), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            Button btnLoad = new Button { Text = "Enter Profile", Location = new System.Drawing.Point(370, 30 + yOffset), Width = 120 };
+            Button btnNew = new Button { Text = "Create Profile", Location = new System.Drawing.Point(500, 30 + yOffset), Width = 120 };
+
+            // Profile fields
+            Label lblName = new Label { Text = "Name:", Location = new System.Drawing.Point(30, 80 + yOffset) };
+            TextBox txtName = new TextBox { Location = new System.Drawing.Point(170, 80 + yOffset), Width = 200 };
+            Label lblPhone = new Label { Text = "Phone:", Location = new System.Drawing.Point(30, 120 + yOffset) };
+            TextBox txtPhone = new TextBox { Location = new System.Drawing.Point(170, 120 + yOffset), Width = 200 };
+            Label lblEmail = new Label { Text = "Email:", Location = new System.Drawing.Point(30, 160 + yOffset) };
+            TextBox txtEmail = new TextBox { Location = new System.Drawing.Point(170, 160 + yOffset), Width = 200 };
+
+            // Specialties
+            Label lblSpecialty = new Label { Text = "Specialties:", Location = new System.Drawing.Point(30, 200 + yOffset) };
+            CheckedListBox clbSpecialties = new CheckedListBox { Location = new System.Drawing.Point(140, 200 + yOffset), Width = 200, Height = 80 };
+            foreach (DataRow row in _workerService.GetAllSpecialties().Rows)
+                clbSpecialties.Items.Add(new ComboBoxItem(row["Name"]?.ToString() ?? "", (int)row["Id"]));
+
+            // Locations
+            Label lblLocation = new Label { Text = "Locations:", Location = new System.Drawing.Point(30, 300 + yOffset) };
+            CheckedListBox clbLocations = new CheckedListBox { Location = new System.Drawing.Point(140, 300 + yOffset), Width = 200, Height = 80 };
+            foreach (DataRow row in _workerService.GetAllLocations().Rows)
+                clbLocations.Items.Add(new ComboBoxItem(row["Area"]?.ToString() ?? "", (int)row["Id"]));
+
+            // TimeSlots
+            Label lblTimeSlots = new Label { Text = "Time Slots:", Location = new System.Drawing.Point(350, 200 + yOffset) };
+            CheckedListBox clbTimeSlots = new CheckedListBox { Location = new System.Drawing.Point(460, 200 + yOffset), Width = 300, Height = 180 };
+            foreach (DataRow row in _workerService.GetAllTimeSlots().Rows)
             {
-                Text = "Add Worker",
-                Location = new System.Drawing.Point(330, 20),
-                Size = new System.Drawing.Size(80, 25)
-            };
-            btnAddWorker.Click += BtnAddWorker_Click;
+                string slotText = $"Day {row["DayOfWeek"]}: {row["StartTime"]}-{row["EndTime"]}";
+                clbTimeSlots.Items.Add(new ComboBoxItem(slotText, (int)row["Id"]));
+            }
 
-            btnUpdateWorker = new Button
+            Button btnSave = new Button { Text = "Save", Location = new System.Drawing.Point(170, 400 + yOffset) };
+
+            // Populate workers
+            cmbWorkers.Items.Clear();
+            foreach (DataRow row in _workerService.GetAllWorkers().Rows)
+                cmbWorkers.Items.Add(new ComboBoxItem(row["Name"]?.ToString() ?? "", (int)row["Id"]));
+
+            // Initially, only allow creating a new profile
+            txtName.Enabled = true;
+            txtPhone.Enabled = true;
+            txtEmail.Enabled = true;
+            clbSpecialties.Enabled = false;
+            clbLocations.Enabled = false;
+            clbTimeSlots.Enabled = false;
+            btnSave.Enabled = false;
+
+            btnLoad.Click += (s, e) =>
             {
-                Text = "Update",
-                Location = new System.Drawing.Point(415, 20),
-                Size = new System.Drawing.Size(80, 25),
-                Enabled = false // Initially disabled until a worker is selected
-            };
-            btnUpdateWorker.Click += BtnUpdateWorker_Click;
+                if (cmbWorkers.SelectedItem is ComboBoxItem workerItem)
+                {
+                    var profile = _workerService.GetWorkerProfile(workerItem.Value);
+                    txtName.Text = profile.Name;
+                    txtPhone.Text = profile.Phone;
+                    txtEmail.Text = profile.Email;
 
-            btnDeleteWorker = new Button
+                    // Disable editing of basic info
+                    txtName.Enabled = false;
+                    txtPhone.Enabled = false;
+                    txtEmail.Enabled = false;
+
+                    // Enable specialties, locations, timeslots
+                    clbSpecialties.Enabled = true;
+                    clbLocations.Enabled = true;
+                    clbTimeSlots.Enabled = true;
+                    btnSave.Enabled = true;
+
+                    // Set specialties
+                    for (int i = 0; i < clbSpecialties.Items.Count; i++)
+                    {
+                        var item = (ComboBoxItem)clbSpecialties.Items[i];
+                        clbSpecialties.SetItemChecked(i, profile.SpecialtyIds.Contains(item.Value));
+                    }
+                    // Set locations
+                    for (int i = 0; i < clbLocations.Items.Count; i++)
+                    {
+                        var item = (ComboBoxItem)clbLocations.Items[i];
+                        clbLocations.SetItemChecked(i, profile.LocationIds.Contains(item.Value));
+                    }
+                    // Set time slots
+                    for (int i = 0; i < clbTimeSlots.Items.Count; i++)
+                    {
+                        var item = (ComboBoxItem)clbTimeSlots.Items[i];
+                        clbTimeSlots.SetItemChecked(i, profile.TimeSlotIds.Contains(item.Value));
+                    }
+                }
+            };
+
+            btnNew.Click += (s, e) =>
             {
-                Text = "Delete",
-                Location = new System.Drawing.Point(500, 20),
-                Size = new System.Drawing.Size(80, 25),
-                Enabled = false // Initially disabled until a worker is selected
-            };
-            btnDeleteWorker.Click += BtnDeleteWorker_Click;
+                cmbWorkers.SelectedIndex = -1;
+                txtName.Text = "";
+                txtPhone.Text = "";
+                txtEmail.Text = "";
+                for (int i = 0; i < clbSpecialties.Items.Count; i++) clbSpecialties.SetItemChecked(i, false);
+                for (int i = 0; i < clbLocations.Items.Count; i++) clbLocations.SetItemChecked(i, false);
+                for (int i = 0; i < clbTimeSlots.Items.Count; i++) clbTimeSlots.SetItemChecked(i, false);
 
-            dgvWorkers = new DataGridView
+                txtName.Enabled = true;
+                txtPhone.Enabled = true;
+                txtEmail.Enabled = true;
+                clbSpecialties.Enabled = false;
+                clbLocations.Enabled = false;
+                clbTimeSlots.Enabled = false;
+                btnSave.Enabled = true;
+            };
+
+            btnSave.Click += (s, e) =>
             {
-                Location = new System.Drawing.Point(20, 60),
-                Size = new System.Drawing.Size(560, 250),
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                ReadOnly = true,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
-            };
-            dgvWorkers.SelectionChanged += DgvWorkers_SelectionChanged;
+                var specialtyIds = clbSpecialties.CheckedItems.OfType<ComboBoxItem>().Select(x => x.Value).ToList();
+                var locationIds = clbLocations.CheckedItems.OfType<ComboBoxItem>().Select(x => x.Value).ToList();
+                var timeSlotIds = clbTimeSlots.CheckedItems.OfType<ComboBoxItem>().Select(x => x.Value).ToList();
 
-            lblStatus = new Label
+                int? workerId = (cmbWorkers.SelectedItem is ComboBoxItem workerItem) ? workerItem.Value : (int?)null;
+
+                // If creating new profile, save and reload worker list, then switch to edit mode
+                if (workerId == null)
+                {
+                    _workerService.SaveOrUpdateProfile(null, txtName.Text, txtPhone.Text, txtEmail.Text, specialtyIds, locationIds, timeSlotIds);
+                    MessageBox.Show("Profile created. Now select yourself from the list to edit specialties, locations, and timeslots.");
+                    // Refresh worker list
+                    cmbWorkers.Items.Clear();
+                    foreach (DataRow row in _workerService.GetAllWorkers().Rows)
+                        cmbWorkers.Items.Add(new ComboBoxItem(row["Name"]?.ToString() ?? "", (int)row["Id"]));
+                    txtName.Text = "";
+                    txtPhone.Text = "";
+                    txtEmail.Text = "";
+                    for (int i = 0; i < clbSpecialties.Items.Count; i++) clbSpecialties.SetItemChecked(i, false);
+                    for (int i = 0; i < clbLocations.Items.Count; i++) clbLocations.SetItemChecked(i, false);
+                    for (int i = 0; i < clbTimeSlots.Items.Count; i++) clbTimeSlots.SetItemChecked(i, false);
+                    txtName.Enabled = true;
+                    txtPhone.Enabled = true;
+                    txtEmail.Enabled = true;
+                    clbSpecialties.Enabled = false;
+                    clbLocations.Enabled = false;
+                    clbTimeSlots.Enabled = false;
+                    btnSave.Enabled = false;
+                }
+                else
+                {
+                    _workerService.SaveOrUpdateProfile(workerId, txtName.Text, txtPhone.Text, txtEmail.Text, specialtyIds, locationIds, timeSlotIds);
+                    MessageBox.Show("Profile updated.");
+                }
+            };
+
+            tab.Controls.Add(lblSelect); tab.Controls.Add(cmbWorkers); tab.Controls.Add(btnLoad); tab.Controls.Add(btnNew);
+            tab.Controls.Add(lblName); tab.Controls.Add(txtName);
+            tab.Controls.Add(lblPhone); tab.Controls.Add(txtPhone);
+            tab.Controls.Add(lblEmail); tab.Controls.Add(txtEmail);
+            tab.Controls.Add(lblSpecialty); tab.Controls.Add(clbSpecialties);
+            tab.Controls.Add(lblLocation); tab.Controls.Add(clbLocations);
+            tab.Controls.Add(lblTimeSlots); tab.Controls.Add(clbTimeSlots);
+            tab.Controls.Add(btnSave);
+        }
+
+        private void SetupTaskCatalogTab(TabPage tab)
+        {
+            AddBackToMenuButton(tab);
+            int yOffset = 50;
+
+            // Task listing 
+            Label lblTaskListing = new Label { Text = "Available Tasks:", Location = new System.Drawing.Point(20, 20 + yOffset), Width = 150, Font = new Font(Font.FontFamily, 10, FontStyle.Bold) };
+            
+            // Task info panel
+            Label lblTaskInfo = new Label { 
+                Location = new System.Drawing.Point(140, 220 + yOffset),
+                Width = 600,
+                Height = 100,
+                AutoSize = false,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // List view for showing all tasks
+            ListView lvTasks = new ListView {
+                Location = new System.Drawing.Point(20, 50 + yOffset),
+                Size = new System.Drawing.Size(800, 150),
+                View = View.Details,
+                FullRowSelect = true
+            };
+            
+            // Add columns to the list view
+            lvTasks.Columns.Add("Task", 300);
+            lvTasks.Columns.Add("Duration (min)", 100);
+            lvTasks.Columns.Add("Fee ($)", 100);
+            lvTasks.Columns.Add("Specialty", 200);
+
+            // Load tasks into list view
+            DataTable tasks = _taskCatalogService.GetAllTasks();
+            foreach (DataRow row in tasks.Rows)
             {
-                Text = "Ready",
-                Location = new System.Drawing.Point(20, 320),
-                Size = new System.Drawing.Size(560, 20)
+                int taskId = Convert.ToInt32(row["id"]);
+                string taskName = row["TaskName"].ToString() ?? "";
+                string duration = row["AverageDuration"].ToString() ?? "";
+                string fee = row["AverageFee"].ToString() ?? "";
+                string specialty = row["Specialty"]?.ToString() ?? "";
+
+                // Add to list view
+                var item = new ListViewItem(new[] { taskName, duration, fee, specialty }) { Tag = taskId };
+                lvTasks.Items.Add(item);
+            }
+
+            // Update task info when selection changes
+            lvTasks.SelectedIndexChanged += (s, e) => 
+            {
+                if (lvTasks.SelectedItems.Count > 0)
+                {
+                    string taskName = lvTasks.SelectedItems[0].SubItems[0].Text;
+                    string duration = lvTasks.SelectedItems[0].SubItems[1].Text;
+                    string fee = lvTasks.SelectedItems[0].SubItems[2].Text;
+                    
+                    lblTaskInfo.Text = $"Task: {taskName}\r\n" + 
+                                      $"Duration: {duration} minutes\r\n" +
+                                      $"Fee: ${fee}";
+                }
+                else
+                {
+                    lblTaskInfo.Text = "";
+                }
             };
 
-            // Add controls to the form
-            this.Controls.Add(lblName);
-            this.Controls.Add(txtWorkerName);
-            this.Controls.Add(btnAddWorker);
-            this.Controls.Add(btnUpdateWorker);
-            this.Controls.Add(btnDeleteWorker);
-            this.Controls.Add(dgvWorkers);
-            this.Controls.Add(lblStatus);
+            // Request button
+            Button btnRequestTask = new Button { Text = "Request Task", Location = new System.Drawing.Point(140, 340 + yOffset), Width = 150 };
+            btnRequestTask.Click += (s, e) =>
+            {
+                if (lvTasks.SelectedItems.Count > 0)
+                {
+                    int taskId = (int)lvTasks.SelectedItems[0].Tag;
+                    OpenTaskRequestForm(taskId);
+                }
+                else
+                {
+                    MessageBox.Show("Please select a task to request.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
 
-            // Set form event handlers
-            this.Load += Form1_Load;
+            // Add controls
+            tab.Controls.Add(lblTaskListing);
+            tab.Controls.Add(lvTasks);
+            tab.Controls.Add(lblTaskInfo);
+            tab.Controls.Add(btnRequestTask);
+        }
+
+        // Class for task items in the dropdown
+        private class TaskItem
+        {
+            public int Id { get; }
+            public string Name { get; }
+            public string Duration { get; }
+            public string Fee { get; }
+
+            public TaskItem(int id, string name, string duration, string fee)
+            {
+                Id = id;
+                Name = name;
+                Duration = duration;
+                Fee = fee;
+            }
+
+            public override string ToString() => Name;
+        }
+
+        private void OpenTaskRequestForm(int taskId)
+        {
+            if (_loggedInClientId == null)
+            {
+                MessageBox.Show("You must be logged in to request a task.", "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            Form requestForm = new Form
+            {
+                Text = "Request Task",
+                Size = new System.Drawing.Size(400, 300),
+                StartPosition = FormStartPosition.CenterParent
+            };
+
+            Label lblAddress = new Label { Text = "Request Address:", Location = new System.Drawing.Point(20, 20) };
+            TextBox txtAddress = new TextBox { Location = new System.Drawing.Point(150, 20), Width = 200 };
+
+            Label lblPreferredTime = new Label { Text = "Preferred Time:", Location = new System.Drawing.Point(20, 60) };
+            DateTimePicker dtpPreferredTime = new DateTimePicker { Location = new System.Drawing.Point(150, 60), Width = 200 };
+
+            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 100), Width = 150 };
+
+            btnSubmit.Click += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtAddress.Text))
+                {
+                    MessageBox.Show("Request address is required.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                try
+                {
+                    _taskCatalogService.CreateTaskRequest(taskId, _loggedInClientId.Value, txtAddress.Text, dtpPreferredTime.Value);
+                    MessageBox.Show("Task request submitted successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    requestForm.Close();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error submitting task request: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            requestForm.Controls.Add(lblAddress);
+            requestForm.Controls.Add(txtAddress);
+            requestForm.Controls.Add(lblPreferredTime);
+            requestForm.Controls.Add(dtpPreferredTime);
+            requestForm.Controls.Add(btnSubmit);
+
+            requestForm.ShowDialog();
         }
 
         private void EnsureDatabaseCreated()
         {
-            // Creates the Workers table if it doesn't already exist
             try
             {
-                string createTableQuery = @"
-                    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Workers]') AND type in (N'U'))
-                    BEGIN
-                        CREATE TABLE [dbo].[Workers] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Name] NVARCHAR(100) NOT NULL
-                        )
-                    END";
-
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    using (SqlCommand command = new SqlCommand(createTableQuery, connection))
-                    {
-                        connection.Open();
-                        command.ExecuteNonQuery();
-                        lblStatus.Text = "Database initialized successfully";
-                    }
-                }
+                _databaseService.EnsureDatabaseInitialized();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error initializing database: {ex.Message}", 
+                MessageBox.Show($"Error initializing database: {ex.Message}",
                     "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void Form1_Load(object? sender, EventArgs e)
+        // Helper for checked list box
+        private class ComboBoxItem
         {
-            // Load workers into the DataGridView when the form loads
-            LoadWorkers();
-        }
-
-        private void BtnAddWorker_Click(object? sender, EventArgs e)
-        {
-            // Adds a new worker to the database
-            if (txtWorkerName == null || string.IsNullOrWhiteSpace(txtWorkerName.Text))
-            {
-                lblStatus!.Text = "Error: Worker name cannot be empty";
-                return;
-            }
-
-            try
-            {
-                string query = "INSERT INTO Workers (Name) VALUES (@Name)";
-                
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@Name", txtWorkerName.Text);
-                        
-                        connection.Open();
-                        int rowsAffected = command.ExecuteNonQuery();
-                        lblStatus!.Text = $"Added worker: {txtWorkerName.Text} - {rowsAffected} row(s) affected";
-                    }
-                }
-                
-                txtWorkerName.Clear();
-                LoadWorkers();
-            }
-            catch (Exception ex)
-            {
-                lblStatus!.Text = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to add worker: {ex.Message}", 
-                    "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void BtnUpdateWorker_Click(object? sender, EventArgs e)
-        {
-            // Updates the selected worker's name in the database
-            if (dgvWorkers == null || dgvWorkers.SelectedRows.Count == 0)
-            {
-                lblStatus!.Text = "Error: No worker selected";
-                return;
-            }
-
-            if (txtWorkerName == null || string.IsNullOrWhiteSpace(txtWorkerName.Text))
-            {
-                lblStatus!.Text = "Error: Worker name cannot be empty";
-                return;
-            }
-
-            try
-            {
-                int workerId = Convert.ToInt32(dgvWorkers.SelectedRows[0].Cells["Id"].Value);
-                
-                string query = "UPDATE Workers SET Name = @Name WHERE Id = @Id";
-                
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@Name", txtWorkerName.Text);
-                        command.Parameters.AddWithValue("@Id", workerId);
-                        
-                        connection.Open();
-                        int rowsAffected = command.ExecuteNonQuery();
-                        lblStatus!.Text = $"Updated worker: {txtWorkerName.Text} - {rowsAffected} row(s) affected";
-                    }
-                }
-                
-                txtWorkerName.Clear();
-                btnUpdateWorker!.Enabled = false;
-                btnDeleteWorker!.Enabled = false;
-                LoadWorkers();
-            }
-            catch (Exception ex)
-            {
-                lblStatus!.Text = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to update worker: {ex.Message}", 
-                    "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void BtnDeleteWorker_Click(object? sender, EventArgs e)
-        {
-            // Deletes the selected worker from the database
-            if (dgvWorkers == null || dgvWorkers.SelectedRows.Count == 0)
-            {
-                lblStatus!.Text = "Error: No worker selected";
-                return;
-            }
-
-            try
-            {
-                int workerId = Convert.ToInt32(dgvWorkers.SelectedRows[0].Cells["Id"].Value);
-                string workerName = dgvWorkers.SelectedRows[0].Cells["Name"].Value?.ToString() ?? string.Empty;
-
-                DialogResult result = MessageBox.Show($"Are you sure you want to delete worker '{workerName}'?", 
-                    "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                
-                if (result == DialogResult.Yes)
-                {
-                    string query = "DELETE FROM Workers WHERE Id = @Id";
-                    
-                    using (SqlConnection connection = new SqlConnection(_connectionString))
-                    {
-                        using (SqlCommand command = new SqlCommand(query, connection))
-                        {
-                            command.Parameters.AddWithValue("@Id", workerId);
-                            
-                            connection.Open();
-                            int rowsAffected = command.ExecuteNonQuery();
-                            lblStatus!.Text = $"Deleted worker: {workerName} - {rowsAffected} row(s) affected";
-                        }
-                    }
-                    
-                    txtWorkerName.Clear();
-                    btnUpdateWorker!.Enabled = false;
-                    btnDeleteWorker!.Enabled = false;
-                    LoadWorkers();
-                }
-            }
-            catch (Exception ex)
-            {
-                lblStatus!.Text = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to delete worker: {ex.Message}", 
-                    "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void DgvWorkers_SelectionChanged(object? sender, EventArgs e)
-        {
-            // Updates the UI when a worker is selected in the DataGridView
-            if (dgvWorkers != null && dgvWorkers.SelectedRows.Count > 0)
-            {
-                string workerName = dgvWorkers.SelectedRows[0].Cells["Name"].Value?.ToString() ?? string.Empty;
-                txtWorkerName!.Text = workerName; // Null-forgiving operator
-                btnUpdateWorker!.Enabled = true; // Null-forgiving operator
-                btnDeleteWorker!.Enabled = true; // Null-forgiving operator
-            }
-            else
-            {
-                txtWorkerName?.Clear();
-                if (btnUpdateWorker != null) btnUpdateWorker.Enabled = false;
-                if (btnDeleteWorker != null) btnDeleteWorker.Enabled = false;
-            }
-        }
-
-        private void LoadWorkers()
-        {
-            // Loads all workers from the database into the DataGridView
-            if (dgvWorkers == null || lblStatus == null) return;
-
-            try
-            {
-                string query = "SELECT Id, Name FROM Workers ORDER BY Name";
-                
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    SqlDataAdapter adapter = new SqlDataAdapter(query, connection);
-                    DataTable dataTable = new DataTable();
-                    adapter.Fill(dataTable);
-                    
-                    dgvWorkers!.DataSource = dataTable; // Null-forgiving operator
-                    lblStatus!.Text = $"Loaded {dataTable.Rows.Count} workers"; // Null-forgiving operator
-                }
-            }
-            catch (Exception ex)
-            {
-                lblStatus!.Text = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to load workers: {ex.Message}", 
-                    "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            public string Text { get; }
+            public int Value { get; }
+            public ComboBoxItem(string text, int value) { Text = text; Value = value; }
+            public override string ToString() => Text;
         }
     }
 }

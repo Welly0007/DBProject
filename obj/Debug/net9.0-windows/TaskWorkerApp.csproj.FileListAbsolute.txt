@@ -61,3 +61,5 @@ D:\academics\College\Level 2\database\TaskWorkerApp\obj\Debug\net9.0-windows\ref
 D:\academics\College\Level 2\database\TaskWorkerApp\obj\Debug\net9.0-windows\TaskWorkerApp.pdb
 D:\academics\College\Level 2\database\TaskWorkerApp\obj\Debug\net9.0-windows\TaskWorkerApp.genruntimeconfig.cache
 D:\academics\College\Level 2\database\TaskWorkerApp\obj\Debug\net9.0-windows\ref\TaskWorkerApp.dll
+D:\academics\College\Level 2\database\TaskWorkerApp\obj\Debug\net9.0-windows\TaskWorkerApp.sourcelink.json
+D:\academics\College\Level 2\database\TaskWorkerApp\bin\Debug\net9.0-windows\scheme\initial-schema.sql

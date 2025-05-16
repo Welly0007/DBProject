@@ -1,7 +1,4 @@
-using System;
-using System.Windows.Forms;
-
-namespace TaskWorkerApp // Changed from SimpleWorkerApp
+namespace TaskWorkerApp
 {
     static class Program
     {
