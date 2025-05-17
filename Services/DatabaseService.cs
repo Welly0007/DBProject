@@ -110,5 +110,38 @@ namespace TaskWorkerApp.Services
                 }
             }
         }
+
+        public void ResetDatabase()
+        {
+            // Read the SQL script from the file
+            string sql = File.ReadAllText(_schemaFilePath);
+
+            // Execute the script to reset the database
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                connection.Open();
+                
+                // Split script by GO statements if present
+                string[] commands = sql.Split(new[] { "GO" }, StringSplitOptions.RemoveEmptyEntries);
+                
+                foreach (string command in commands)
+                {
+                    if (!string.IsNullOrWhiteSpace(command))
+                    {
+                        using (SqlCommand cmd = new SqlCommand(command, connection))
+                        {
+                            try
+                            {
+                                cmd.ExecuteNonQuery();
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new Exception($"Error executing SQL: {ex.Message}", ex);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

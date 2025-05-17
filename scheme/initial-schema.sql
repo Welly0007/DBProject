@@ -90,12 +90,15 @@ CREATE TABLE TaskRequests (
     id INT PRIMARY KEY IDENTITY(1,1),
     ClientID INT NOT NULL,
     TaskID INT NOT NULL,
+    LocationID INT NOT NULL,
     RequestedDateTime DATETIME NOT NULL,
     PreferredTimeSlot DATETIME,
     RequestAddress VARCHAR(200),
     Status VARCHAR(20) NOT NULL DEFAULT 'open',
+
     FOREIGN KEY (ClientID) REFERENCES Clients(id),
     FOREIGN KEY (TaskID) REFERENCES Tasks(id),
+    FOREIGN KEY (LocationID) REFERENCES Locations(id),
     CONSTRAINT CHK_RequestStatus CHECK (Status IN ('open', 'assigned', 'completed', 'cancelled'))
 );
 

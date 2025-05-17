@@ -49,10 +49,42 @@ namespace TaskWorkerApp
             pnlMainMenu = new Panel { Dock = DockStyle.Fill };
             btnClient = new Button { Text = "Client", Location = new System.Drawing.Point(200, 200), Size = new System.Drawing.Size(200, 60) };
             btnWorker = new Button { Text = "Worker", Location = new System.Drawing.Point(500, 200), Size = new System.Drawing.Size(200, 60) };
+            
+            // Add Reset Database button
+            Button btnResetDb = new Button { 
+                Text = "Reset Database", 
+                Location = new System.Drawing.Point(350, 300), 
+                Size = new System.Drawing.Size(200, 40),
+                BackColor = System.Drawing.Color.LightCoral
+            };
+            
+            btnResetDb.Click += (s, e) => 
+            {
+                if (MessageBox.Show(
+                    "This will reset the database to its initial state. All data will be lost.\n\nAre you sure you want to continue?", 
+                    "Reset Database", 
+                    MessageBoxButtons.YesNo, 
+                    MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    try
+                    {
+                        _databaseService.ResetDatabase();
+                        MessageBox.Show("Database reset successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Error resetting database: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            };
+            
             btnClient.Click += (s, e) => ShowTabs("client");
             btnWorker.Click += (s, e) => ShowTabs("worker");
+            
             pnlMainMenu.Controls.Add(btnClient);
             pnlMainMenu.Controls.Add(btnWorker);
+            pnlMainMenu.Controls.Add(btnResetDb);
+            
             this.Controls.Add(pnlMainMenu);
         }
 
@@ -502,17 +534,36 @@ namespace TaskWorkerApp
             Form requestForm = new Form
             {
                 Text = "Request Task",
-                Size = new System.Drawing.Size(400, 300),
+                Size = new System.Drawing.Size(400, 350),
                 StartPosition = FormStartPosition.CenterParent
             };
 
             Label lblAddress = new Label { Text = "Request Address:", Location = new System.Drawing.Point(20, 20) };
             TextBox txtAddress = new TextBox { Location = new System.Drawing.Point(150, 20), Width = 200 };
 
-            Label lblPreferredTime = new Label { Text = "Preferred Time:", Location = new System.Drawing.Point(20, 60) };
-            DateTimePicker dtpPreferredTime = new DateTimePicker { Location = new System.Drawing.Point(150, 60), Width = 200 };
+            // Add location selection
+            Label lblLocation = new Label { Text = "Location Area:", Location = new System.Drawing.Point(20, 60) };
+            ComboBox cmbLocations = new ComboBox { 
+                Location = new System.Drawing.Point(150, 60), 
+                Width = 200, 
+                DropDownStyle = ComboBoxStyle.DropDownList 
+            };
+            
+            // Load available locations
+            DataTable locations = _workerService.GetAllLocations();
+            foreach (DataRow row in locations.Rows)
+            {
+                cmbLocations.Items.Add(new ComboBoxItem(row["Area"].ToString() ?? "", Convert.ToInt32(row["Id"])));
+            }
+            
+            // Select first location by default if available
+            if (cmbLocations.Items.Count > 0)
+                cmbLocations.SelectedIndex = 0;
 
-            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 100), Width = 150 };
+            Label lblPreferredTime = new Label { Text = "Preferred Time:", Location = new System.Drawing.Point(20, 100) };
+            DateTimePicker dtpPreferredTime = new DateTimePicker { Location = new System.Drawing.Point(150, 100), Width = 200 };
+
+            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 140), Width = 150 };
 
             btnSubmit.Click += (s, e) =>
             {
@@ -522,9 +573,21 @@ namespace TaskWorkerApp
                     return;
                 }
 
+                if (cmbLocations.SelectedItem == null)
+                {
+                    MessageBox.Show("Please select a location area.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 try
                 {
-                    _taskCatalogService.CreateTaskRequest(taskId, _loggedInClientId.Value, txtAddress.Text, dtpPreferredTime.Value);
+                    int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
+                    _taskCatalogService.CreateTaskRequest(
+                        taskId, 
+                        _loggedInClientId.Value, 
+                        txtAddress.Text, 
+                        dtpPreferredTime.Value, 
+                        locationId);
                     MessageBox.Show("Task request submitted successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     requestForm.Close();
                 }
@@ -536,6 +599,8 @@ namespace TaskWorkerApp
 
             requestForm.Controls.Add(lblAddress);
             requestForm.Controls.Add(txtAddress);
+            requestForm.Controls.Add(lblLocation);
+            requestForm.Controls.Add(cmbLocations);
             requestForm.Controls.Add(lblPreferredTime);
             requestForm.Controls.Add(dtpPreferredTime);
             requestForm.Controls.Add(btnSubmit);

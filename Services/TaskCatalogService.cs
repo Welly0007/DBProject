@@ -35,7 +35,7 @@ namespace TaskWorkerApp.Services
             return result;
         }
 
-        public void CreateTaskRequest(int taskId, int clientId, string requestAddress, DateTime preferredTime)
+        public void CreateTaskRequest(int taskId, int clientId, string requestAddress, DateTime preferredTime, int locationId)
         {
             // Ensure the TaskID exists in the Tasks table
             string taskCheckQuery = "SELECT COUNT(1) FROM Tasks WHERE Id = @TaskID";
@@ -61,8 +61,20 @@ namespace TaskWorkerApp.Services
                 throw new Exception("The specified client does not exist.");
             }
 
-            string query = @"INSERT INTO TaskRequests (ClientID, TaskID, RequestedDateTime, PreferredTimeSlot, RequestAddress, Status)
-                             VALUES (@ClientID, @TaskID, @RequestedDateTime, @PreferredTimeSlot, @RequestAddress, 'open')";
+            // Ensure the LocationID exists in the Locations table
+            string locationCheckQuery = "SELECT COUNT(1) FROM Locations WHERE Id = @LocationID";
+            int locationExists = Convert.ToInt32(_db.ExecuteQueryScalar(locationCheckQuery, cmd =>
+            {
+                cmd.Parameters.AddWithValue("@LocationID", locationId);
+            }));
+
+            if (locationExists == 0)
+            {
+                throw new Exception("The specified location does not exist.");
+            }
+
+            string query = @"INSERT INTO TaskRequests (ClientID, TaskID, RequestedDateTime, PreferredTimeSlot, RequestAddress, LocationID, Status)
+                             VALUES (@ClientID, @TaskID, @RequestedDateTime, @PreferredTimeSlot, @RequestAddress, @LocationID, 'open')";
             _db.ExecuteNonQuery(query, cmd =>
             {
                 cmd.Parameters.AddWithValue("@ClientID", clientId);
@@ -70,6 +82,7 @@ namespace TaskWorkerApp.Services
                 cmd.Parameters.AddWithValue("@RequestedDateTime", DateTime.Now);
                 cmd.Parameters.AddWithValue("@PreferredTimeSlot", preferredTime);
                 cmd.Parameters.AddWithValue("@RequestAddress", requestAddress);
+                cmd.Parameters.AddWithValue("@LocationID", locationId);
             });
         }
 
