@@ -92,7 +92,7 @@ CREATE TABLE TaskRequests (
     TaskID INT NOT NULL,
     LocationID INT NOT NULL,
     RequestedDateTime DATETIME NOT NULL,
-    PreferredTimeSlot DATETIME,
+    PreferredTimeSlot INT,
     RequestAddress VARCHAR(200),
     Status VARCHAR(20) NOT NULL DEFAULT 'open',
 
