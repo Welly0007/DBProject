@@ -177,6 +177,45 @@ namespace TaskWorkerApp.Services
             return result;
         }
 
+        // New overload: get available workers for a specific time slot
+        public List<int> GetAvailableWorkersForTask(int taskId, int locationId, int timeSlotId)
+        {
+            // Get the specialty required for the task
+            var dtTask = _db.ExecuteQuery("SELECT SpecialtyID FROM Tasks WHERE Id = @TaskId", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@TaskId", taskId);
+            });
+            if (dtTask.Rows.Count == 0) return new List<int>();
+            int specialtyId = Convert.ToInt32(dtTask.Rows[0]["SpecialtyID"]);
+
+            // Find workers available for this slot, location, and specialty
+            var dtWorkers = _db.ExecuteQuery(@"
+                SELECT wa.WorkerID
+                FROM WorkerAvailability wa
+                WHERE wa.TimeSlotID = @TimeSlotId
+                  AND wa.LocationID = @LocationId
+                  AND wa.SpecialtyID = @SpecialtyId
+                  AND NOT EXISTS (
+                      SELECT 1 FROM TaskAssignments ta
+                      JOIN TaskRequests tr ON ta.RequestID = tr.id
+                      WHERE ta.WorkerID = wa.WorkerID
+                        AND tr.LocationID = @LocationId
+                        AND tr.PreferredTimeSlot = @TimeSlotId
+                        AND ta.Status IN ('scheduled', 'in_progress')
+                  )
+                GROUP BY wa.WorkerID
+            ", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@TimeSlotId", timeSlotId);
+                cmd.Parameters.AddWithValue("@LocationId", locationId);
+                cmd.Parameters.AddWithValue("@SpecialtyId", specialtyId);
+            });
+            var result = new List<int>();
+            foreach (DataRow row in dtWorkers.Rows)
+                result.Add(Convert.ToInt32(row["WorkerID"]));
+            return result;
+        }
+
         /// <summary>
         /// Returns a list of time slot IDs that have at least one available worker for the given task and location.
         /// </summary>

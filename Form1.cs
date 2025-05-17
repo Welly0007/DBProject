@@ -537,7 +537,7 @@ namespace TaskWorkerApp
             Form requestForm = new Form
             {
                 Text = "Request Task",
-                Size = new System.Drawing.Size(420, 350),
+                Size = new System.Drawing.Size(420, 300),
                 StartPosition = FormStartPosition.CenterParent
             };
 
@@ -562,13 +562,15 @@ namespace TaskWorkerApp
             Label lblTimeSlot = new Label { Text = "Time Slot:", Location = new System.Drawing.Point(20, 100) };
             ComboBox cmbTimeSlots = new ComboBox { Location = new System.Drawing.Point(150, 100), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
 
+            // Label to show available workers
+            Label lblAvailableWorkers = new Label { Text = "Available Workers:", Location = new System.Drawing.Point(20, 140), Width = 370, Height = 40, AutoSize = false };
+
             // Helper to load available time slots for the selected task/location
             void LoadAvailableTimeSlots()
             {
                 cmbTimeSlots.Items.Clear();
                 if (cmbLocations.SelectedItem == null) return;
                 int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
-                // Use the new method to get available time slot IDs
                 var availableSlotIds = _workerService.GetAvailableTimeSlotsForTask(taskId, locationId);
                 DataTable slots = _workerService.GetAllTimeSlots();
                 foreach (DataRow row in slots.Rows)
@@ -582,11 +584,37 @@ namespace TaskWorkerApp
                 }
                 if (cmbTimeSlots.Items.Count > 0)
                     cmbTimeSlots.SelectedIndex = 0;
+                UpdateAvailableWorkersLabel();
             }
+
+            void UpdateAvailableWorkersLabel()
+            {
+                lblAvailableWorkers.Text = "Available Workers:";
+                if (cmbLocations.SelectedItem == null || cmbTimeSlots.SelectedItem == null) return;
+                int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
+                int timeSlotId = ((ComboBoxItem)cmbTimeSlots.SelectedItem).Value;
+                var workerIds = _workerService.GetAvailableWorkersForTask(taskId, locationId, timeSlotId);
+                if (workerIds.Count == 0)
+                {
+                    lblAvailableWorkers.Text = "Available Workers: None";
+                }
+                else
+                {
+                    // Get worker names
+                    var allWorkers = _workerService.GetAllWorkers();
+                    var names = allWorkers.Rows.Cast<DataRow>()
+                        .Where(r => workerIds.Contains(Convert.ToInt32(r["Id"])))
+                        .Select(r => r["Name"].ToString())
+                        .ToList();
+                    lblAvailableWorkers.Text = "Available Workers: " + string.Join(", ", names);
+                }
+            }
+
             cmbLocations.SelectedIndexChanged += (s, e) => LoadAvailableTimeSlots();
+            cmbTimeSlots.SelectedIndexChanged += (s, e) => UpdateAvailableWorkersLabel();
             LoadAvailableTimeSlots();
 
-            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 160), Width = 150 };
+            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 200), Width = 150 };
             btnSubmit.Click += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(txtAddress.Text))
@@ -608,21 +636,12 @@ namespace TaskWorkerApp
                 {
                     int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
                     int timeSlotId = ((ComboBoxItem)cmbTimeSlots.SelectedItem).Value;
-                    DataTable slots = _workerService.GetAllTimeSlots();
-                    DataRow slotRow = slots.Rows.Cast<DataRow>().FirstOrDefault(r => Convert.ToInt32(r["Id"]) == timeSlotId);
-                    if (slotRow == null)
-                    {
-                        MessageBox.Show("Invalid time slot.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-                    TimeSpan startTime = (TimeSpan)slotRow["StartTime"];
-                    DateTime preferredDateTime = DateTime.Today.Date + startTime;
                     string? assignedWorkerName;
                     _taskCatalogService.CreateTaskRequest(
                         taskId,
                         _loggedInClientId.Value,
                         txtAddress.Text,
-                        preferredDateTime,
+                        timeSlotId,
                         locationId,
                         out assignedWorkerName);
                     if (!string.IsNullOrEmpty(assignedWorkerName))
@@ -647,6 +666,7 @@ namespace TaskWorkerApp
             requestForm.Controls.Add(cmbLocations);
             requestForm.Controls.Add(lblTimeSlot);
             requestForm.Controls.Add(cmbTimeSlots);
+            requestForm.Controls.Add(lblAvailableWorkers);
             requestForm.Controls.Add(btnSubmit);
 
             requestForm.ShowDialog();
