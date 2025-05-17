@@ -246,6 +246,53 @@ namespace TaskWorkerApp.Services
             return result;
         }
 
+        // Method to mark a task as completed
+        public bool MarkTaskAsCompleted(int taskRequestId, int workerId)
+        {
+            try
+            {
+                // First verify that this task is assigned to this worker
+                string verifyQuery = @"
+                    SELECT COUNT(1) FROM TaskAssignments ta 
+                    WHERE ta.RequestID = @RequestId AND ta.WorkerID = @WorkerId";
+
+                int taskExists = Convert.ToInt32(_db.ExecuteQueryScalar(verifyQuery, cmd =>
+                {
+                    cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                    cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                }));
+
+                if (taskExists == 0)
+                    return false; // Task not assigned to this worker
+
+                // Update task assignment status to completed
+                _db.ExecuteNonQuery(@"
+                    UPDATE TaskAssignments SET 
+                        Status = 'completed', 
+                        ActualTimeSlot = @CompletionTime
+                    WHERE RequestID = @RequestId AND WorkerID = @WorkerId", cmd =>
+                {
+                    cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                    cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                    cmd.Parameters.AddWithValue("@CompletionTime", DateTime.Now);
+                });
+
+                // Update the task request status
+                _db.ExecuteNonQuery(@"
+                    UPDATE TaskRequests SET Status = 'completed' 
+                    WHERE id = @RequestId", cmd =>
+                {
+                    cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                });
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public class WorkerProfile
         {
             public string Name { get; set; } = "";

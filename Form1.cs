@@ -107,6 +107,10 @@ namespace TaskWorkerApp
                     tabTaskCatalog = new TabPage("Task Catalog");
                     SetupTaskCatalogTab(tabTaskCatalog);
                     tabControl.TabPages.Add(tabTaskCatalog);
+
+                    var tabClientRequests = new TabPage("My Requests");
+                    SetupClientRequestsTab(tabClientRequests);
+                    tabControl.TabPages.Add(tabClientRequests);
                 }
             }
             else // worker
@@ -450,9 +454,9 @@ namespace TaskWorkerApp
             Button btnRequestTask = new Button { Text = "Request Task", Location = new System.Drawing.Point(140, 340 + yOffset), Width = 150 };
             btnRequestTask.Click += (s, e) =>
             {
-                if (lvTasks.SelectedItems.Count > 0)
+                if (lvTasks.SelectedItems.Count > 0 && lvTasks.SelectedItems[0].Tag != null)
                 {
-                    int taskId = (int)lvTasks.SelectedItems[0].Tag;
+                    int taskId = Convert.ToInt32(lvTasks.SelectedItems[0].Tag);
                     OpenTaskRequestForm(taskId);
                 }
                 else
@@ -466,6 +470,76 @@ namespace TaskWorkerApp
             tab.Controls.Add(lvTasks);
             tab.Controls.Add(lblTaskInfo);
             tab.Controls.Add(btnRequestTask);
+        }
+
+        private void SetupClientRequestsTab(TabPage tab)
+        {
+            AddBackToMenuButton(tab);
+            if (_loggedInClientId == null) return;
+            int yOffset = 50;
+
+            Label lblTitle = new Label
+            {
+                Text = "My Requested Tasks:",
+                Location = new System.Drawing.Point(20, 20 + yOffset),
+                Width = 250,
+                Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold)
+            };
+
+            ListView lvRequests = new ListView
+            {
+                Location = new System.Drawing.Point(20, 50 + yOffset),
+                Size = new System.Drawing.Size(800, 300),
+                View = View.Details,
+                FullRowSelect = true
+            };
+            lvRequests.Columns.Add("Task", 200);
+            lvRequests.Columns.Add("Location", 120);
+            lvRequests.Columns.Add("Time Slot", 150);
+            lvRequests.Columns.Add("Status", 100);
+            lvRequests.Columns.Add("Worker", 150);
+            lvRequests.Columns.Add("Requested On", 150);
+
+            // Query to get the signed-in client's requests
+            string query = @"
+                SELECT tr.id, t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status,
+                       w.Name AS WorkerName, tr.RequestedDateTime
+                FROM TaskRequests tr
+                JOIN Tasks t ON tr.TaskID = t.id
+                JOIN Locations l ON tr.LocationID = l.id
+                JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
+                LEFT JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                LEFT JOIN Workers w ON ta.WorkerID = w.id
+                WHERE tr.ClientID = @ClientId
+                ORDER BY tr.RequestedDateTime DESC";
+            var dt = _databaseService.ExecuteQuery(query, cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value));
+
+            foreach (DataRow row in dt.Rows)
+            {
+                string slot = $"Day {row["DayOfWeek"]}: {row["StartTime"]}-{row["EndTime"]}";
+                string status = row["Status"]?.ToString() ?? "";
+                string worker = row["WorkerName"] == DBNull.Value ? "Not assigned" : (row["WorkerName"]?.ToString() ?? "Not assigned");
+                string requestedOn = Convert.ToDateTime(row["RequestedDateTime"]).ToString("MMM dd, yyyy HH:mm");
+                // Only show assigned or completed
+                if (status != "assigned" && status != "completed") continue;
+                var item = new ListViewItem(new[]
+                {
+                    row["TaskName"].ToString() ?? "",
+                    row["Area"].ToString() ?? "",
+                    slot,
+                    status,
+                    worker,
+                    requestedOn
+                });
+                if (status == "completed")
+                    item.BackColor = System.Drawing.Color.PaleGreen;
+                else if (status == "assigned")
+                    item.BackColor = System.Drawing.Color.LightSkyBlue;
+                lvRequests.Items.Add(item);
+            }
+
+            tab.Controls.Add(lblTitle);
+            tab.Controls.Add(lvRequests);
         }
 
         // Class for task items in the dropdown
@@ -760,13 +834,18 @@ namespace TaskWorkerApp
             lvAssigned.Columns.Add("Location", 150);
             lvAssigned.Columns.Add("Time Slot", 150);
             lvAssigned.Columns.Add("Status", 100);
-            var dt = _databaseService.ExecuteQuery(@"SELECT t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status
+            lvAssigned.Columns.Add("Request ID", 0); // Hidden column for RequestID
+
+            var dt = _databaseService.ExecuteQuery(@"
+                SELECT t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status, tr.id as RequestID
                 FROM TaskAssignments ta
                 JOIN TaskRequests tr ON ta.RequestID = tr.id
                 JOIN Tasks t ON tr.TaskID = t.id
                 JOIN Locations l ON tr.LocationID = l.id
                 JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
-                WHERE ta.WorkerID = @W AND tr.Status <> 'open'", cmd => cmd.Parameters.AddWithValue("@W", _loggedInWorkerId.Value));
+                WHERE ta.WorkerID = @W AND tr.Status <> 'open'",
+                cmd => cmd.Parameters.AddWithValue("@W", _loggedInWorkerId.Value));
+
             foreach (DataRow row in dt.Rows)
             {
                 string slot = $"Day {row["DayOfWeek"]}: {row["StartTime"]}-{row["EndTime"]}";
@@ -775,12 +854,76 @@ namespace TaskWorkerApp
                     row["TaskName"].ToString() ?? "",
                     row["Area"].ToString() ?? "",
                     slot,
-                    row["Status"].ToString() ?? ""
+                    row["Status"].ToString() ?? "",
+                    row["RequestID"].ToString() ?? ""
                 });
                 lvAssigned.Items.Add(item);
             }
+
+            // Add "Mark as Completed" button
+            Button btnComplete = new Button
+            {
+                Text = "Mark as Completed",
+                Location = new System.Drawing.Point(20, 360 + yOffset),
+                Width = 150,
+                Enabled = false
+            };
+
+            // Enable/disable button based on selection and status
+            lvAssigned.SelectedIndexChanged += (s, e) =>
+            {
+                if (lvAssigned.SelectedItems.Count > 0)
+                {
+                    string status = lvAssigned.SelectedItems[0].SubItems[3].Text;
+                    btnComplete.Enabled = (status == "assigned" || status == "scheduled" || status == "in_progress");
+                }
+                else
+                {
+                    btnComplete.Enabled = false;
+                }
+            };
+
+            // Handle completion button click
+            btnComplete.Click += (s, e) =>
+            {
+                if (lvAssigned.SelectedItems.Count > 0)
+                {
+                    var selectedItem = lvAssigned.SelectedItems[0];
+                    string taskName = selectedItem.SubItems[0].Text;
+                    int requestId = int.Parse(selectedItem.SubItems[4].Text); // Get the request ID
+
+                    if (MessageBox.Show($"Are you sure you want to mark '{taskName}' as completed?",
+                                        "Confirm Task Completion",
+                                        MessageBoxButtons.YesNo,
+                                        MessageBoxIcon.Question) == DialogResult.Yes)
+                    {
+                        bool success = _workerService.MarkTaskAsCompleted(requestId, _loggedInWorkerId.Value);
+
+                        if (success)
+                        {
+                            MessageBox.Show("Task marked as completed successfully.",
+                                            "Success",
+                                            MessageBoxButtons.OK,
+                                            MessageBoxIcon.Information);
+
+                            // Update the status in the list view
+                            selectedItem.SubItems[3].Text = "completed";
+                            btnComplete.Enabled = false;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Failed to mark task as completed. Please try again.",
+                                            "Error",
+                                            MessageBoxButtons.OK,
+                                            MessageBoxIcon.Error);
+                        }
+                    }
+                }
+            };
+
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvAssigned);
+            tab.Controls.Add(btnComplete);
         }
     }
 }
