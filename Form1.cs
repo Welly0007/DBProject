@@ -617,13 +617,22 @@ namespace TaskWorkerApp
                     }
                     TimeSpan startTime = (TimeSpan)slotRow["StartTime"];
                     DateTime preferredDateTime = DateTime.Today.Date + startTime;
+                    string? assignedWorkerName;
                     _taskCatalogService.CreateTaskRequest(
                         taskId,
                         _loggedInClientId.Value,
                         txtAddress.Text,
                         preferredDateTime,
-                        locationId);
-                    MessageBox.Show("Task request submitted successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        locationId,
+                        out assignedWorkerName);
+                    if (!string.IsNullOrEmpty(assignedWorkerName))
+                    {
+                        MessageBox.Show($"Task request submitted and assigned to {assignedWorkerName}.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Task request submitted, but no available worker was found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                     requestForm.Close();
                 }
                 catch (Exception ex)

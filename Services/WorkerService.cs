@@ -105,20 +105,22 @@ namespace TaskWorkerApp.Services
             _db.ExecuteNonQuery("DELETE FROM WorkerAvailability WHERE WorkerID = @W", cmd => cmd.Parameters.AddWithValue("@W", workerId.Value));
             if (specialtyIds.Count > 0 && locationIds.Count > 0 && timeSlotIds.Count > 0)
             {
-                foreach (var locId in locationIds)
+                foreach (var specialtyId in specialtyIds)
                 {
-                    foreach (var tsId in timeSlotIds)
+                    foreach (var locId in locationIds)
                     {
-                        var sid = specialtyIds.First();
-                        _db.ExecuteNonQuery(
-                            "INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (@W, @T, @L, @S)",
-                            cmd =>
-                            {
-                                cmd.Parameters.AddWithValue("@W", workerId.Value);
-                                cmd.Parameters.AddWithValue("@T", tsId);
-                                cmd.Parameters.AddWithValue("@L", locId);
-                                cmd.Parameters.AddWithValue("@S", sid);
-                            });
+                        foreach (var tsId in timeSlotIds)
+                        {
+                            _db.ExecuteNonQuery(
+                                "INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (@W, @T, @L, @S)",
+                                cmd =>
+                                {
+                                    cmd.Parameters.AddWithValue("@W", workerId.Value);
+                                    cmd.Parameters.AddWithValue("@T", tsId);
+                                    cmd.Parameters.AddWithValue("@L", locId);
+                                    cmd.Parameters.AddWithValue("@S", specialtyId);
+                                });
+                        }
                     }
                 }
             }
