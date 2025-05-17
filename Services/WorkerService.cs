@@ -124,6 +124,87 @@ namespace TaskWorkerApp.Services
             }
         }
 
+        public List<int> GetAvailableWorkersForTask(int taskId, int locationId, DateTime preferredDateTime)
+        {
+            // Get the specialty required for the task
+            var dtTask = _db.ExecuteQuery("SELECT SpecialtyID FROM Tasks WHERE Id = @TaskId", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@TaskId", taskId);
+            });
+            if (dtTask.Rows.Count == 0) return new List<int>();
+            int specialtyId = Convert.ToInt32(dtTask.Rows[0]["SpecialtyID"]);
+
+            // Find the matching time slot
+            int dayOfWeek = (int)preferredDateTime.DayOfWeek;
+            if (dayOfWeek == 0) dayOfWeek = 7; // SQL: 1=Monday, C#: 0=Sunday
+            TimeSpan time = preferredDateTime.TimeOfDay;
+            var dtSlot = _db.ExecuteQuery("SELECT Id FROM TimeSlots WHERE DayOfWeek = @Day AND StartTime <= @Time AND EndTime > @Time", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@Day", dayOfWeek);
+                cmd.Parameters.AddWithValue("@Time", time);
+            });
+            if (dtSlot.Rows.Count == 0) return new List<int>();
+            int timeSlotId = Convert.ToInt32(dtSlot.Rows[0]["Id"]);
+
+            // Find workers available for this slot, location, and specialty
+            var dtWorkers = _db.ExecuteQuery(@"
+                SELECT wa.WorkerID
+                FROM WorkerAvailability wa
+                WHERE wa.TimeSlotID = @TimeSlotId
+                  AND wa.LocationID = @LocationId
+                  AND wa.SpecialtyID = @SpecialtyId
+                  AND NOT EXISTS (
+                      SELECT 1 FROM TaskAssignments ta
+                      JOIN TaskRequests tr ON ta.RequestID = tr.id
+                      WHERE ta.WorkerID = wa.WorkerID
+                        AND tr.LocationID = @LocationId
+                        AND tr.RequestedDateTime = @PrefDate
+                        AND ta.Status IN ('scheduled', 'in_progress')
+                  )
+                GROUP BY wa.WorkerID
+            ", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@TimeSlotId", timeSlotId);
+                cmd.Parameters.AddWithValue("@LocationId", locationId);
+                cmd.Parameters.AddWithValue("@SpecialtyId", specialtyId);
+                cmd.Parameters.AddWithValue("@PrefDate", preferredDateTime);
+            });
+            var result = new List<int>();
+            foreach (DataRow row in dtWorkers.Rows)
+                result.Add(Convert.ToInt32(row["WorkerID"]));
+            return result;
+        }
+
+        /// <summary>
+        /// Returns a list of time slot IDs that have at least one available worker for the given task and location.
+        /// </summary>
+        public List<int> GetAvailableTimeSlotsForTask(int taskId, int locationId)
+        {
+            // Get the specialty required for the task
+            var dtTask = _db.ExecuteQuery("SELECT SpecialtyID FROM Tasks WHERE Id = @TaskId", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@TaskId", taskId);
+            });
+            if (dtTask.Rows.Count == 0) return new List<int>();
+            int specialtyId = Convert.ToInt32(dtTask.Rows[0]["SpecialtyID"]);
+
+            // Find all time slots with at least one available worker for this task/location
+            var dtSlots = _db.ExecuteQuery(@"
+                SELECT DISTINCT wa.TimeSlotID
+                FROM WorkerAvailability wa
+                WHERE wa.LocationID = @LocationId
+                  AND wa.SpecialtyID = @SpecialtyId
+            ", cmd =>
+            {
+                cmd.Parameters.AddWithValue("@LocationId", locationId);
+                cmd.Parameters.AddWithValue("@SpecialtyId", specialtyId);
+            });
+            var result = new List<int>();
+            foreach (DataRow row in dtSlots.Rows)
+                result.Add(Convert.ToInt32(row["TimeSlotID"]));
+            return result;
+        }
+
         public class WorkerProfile
         {
             public string Name { get; set; } = "";

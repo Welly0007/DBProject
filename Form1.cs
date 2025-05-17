@@ -30,7 +30,7 @@ namespace TaskWorkerApp
             InitializeComponent();
             string schemaFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scheme", "initial-schema.sql");
             _databaseService = new DatabaseService(
-                "Server=WELLY-PC\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
+                "Server=ALYY;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
                 schemaFilePath);
             _workerService = new WorkerService(_databaseService);
             _clientService = new ClientService(_databaseService);
@@ -49,21 +49,22 @@ namespace TaskWorkerApp
             pnlMainMenu = new Panel { Dock = DockStyle.Fill };
             btnClient = new Button { Text = "Client", Location = new System.Drawing.Point(200, 200), Size = new System.Drawing.Size(200, 60) };
             btnWorker = new Button { Text = "Worker", Location = new System.Drawing.Point(500, 200), Size = new System.Drawing.Size(200, 60) };
-            
+
             // Add Reset Database button
-            Button btnResetDb = new Button { 
-                Text = "Reset Database", 
-                Location = new System.Drawing.Point(350, 300), 
+            Button btnResetDb = new Button
+            {
+                Text = "Reset Database",
+                Location = new System.Drawing.Point(350, 300),
                 Size = new System.Drawing.Size(200, 40),
                 BackColor = System.Drawing.Color.LightCoral
             };
-            
-            btnResetDb.Click += (s, e) => 
+
+            btnResetDb.Click += (s, e) =>
             {
                 if (MessageBox.Show(
-                    "This will reset the database to its initial state. All data will be lost.\n\nAre you sure you want to continue?", 
-                    "Reset Database", 
-                    MessageBoxButtons.YesNo, 
+                    "This will reset the database to its initial state. All data will be lost.\n\nAre you sure you want to continue?",
+                    "Reset Database",
+                    MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
                     try
@@ -77,14 +78,14 @@ namespace TaskWorkerApp
                     }
                 }
             };
-            
+
             btnClient.Click += (s, e) => ShowTabs("client");
             btnWorker.Click += (s, e) => ShowTabs("worker");
-            
+
             pnlMainMenu.Controls.Add(btnClient);
             pnlMainMenu.Controls.Add(btnWorker);
             pnlMainMenu.Controls.Add(btnResetDb);
-            
+
             this.Controls.Add(pnlMainMenu);
         }
 
@@ -424,9 +425,10 @@ namespace TaskWorkerApp
 
             // Task listing 
             Label lblTaskListing = new Label { Text = "Available Tasks:", Location = new System.Drawing.Point(20, 20 + yOffset), Width = 150, Font = new Font(Font.FontFamily, 10, FontStyle.Bold) };
-            
+
             // Task info panel
-            Label lblTaskInfo = new Label { 
+            Label lblTaskInfo = new Label
+            {
                 Location = new System.Drawing.Point(140, 220 + yOffset),
                 Width = 600,
                 Height = 100,
@@ -435,13 +437,14 @@ namespace TaskWorkerApp
             };
 
             // List view for showing all tasks
-            ListView lvTasks = new ListView {
+            ListView lvTasks = new ListView
+            {
                 Location = new System.Drawing.Point(20, 50 + yOffset),
                 Size = new System.Drawing.Size(800, 150),
                 View = View.Details,
                 FullRowSelect = true
             };
-            
+
             // Add columns to the list view
             lvTasks.Columns.Add("Task", 300);
             lvTasks.Columns.Add("Duration (min)", 100);
@@ -464,15 +467,15 @@ namespace TaskWorkerApp
             }
 
             // Update task info when selection changes
-            lvTasks.SelectedIndexChanged += (s, e) => 
+            lvTasks.SelectedIndexChanged += (s, e) =>
             {
                 if (lvTasks.SelectedItems.Count > 0)
                 {
                     string taskName = lvTasks.SelectedItems[0].SubItems[0].Text;
                     string duration = lvTasks.SelectedItems[0].SubItems[1].Text;
                     string fee = lvTasks.SelectedItems[0].SubItems[2].Text;
-                    
-                    lblTaskInfo.Text = $"Task: {taskName}\r\n" + 
+
+                    lblTaskInfo.Text = $"Task: {taskName}\r\n" +
                                       $"Duration: {duration} minutes\r\n" +
                                       $"Fee: ${fee}";
                 }
@@ -534,7 +537,7 @@ namespace TaskWorkerApp
             Form requestForm = new Form
             {
                 Text = "Request Task",
-                Size = new System.Drawing.Size(400, 350),
+                Size = new System.Drawing.Size(420, 350),
                 StartPosition = FormStartPosition.CenterParent
             };
 
@@ -543,28 +546,47 @@ namespace TaskWorkerApp
 
             // Add location selection
             Label lblLocation = new Label { Text = "Location Area:", Location = new System.Drawing.Point(20, 60) };
-            ComboBox cmbLocations = new ComboBox { 
-                Location = new System.Drawing.Point(150, 60), 
-                Width = 200, 
-                DropDownStyle = ComboBoxStyle.DropDownList 
+            ComboBox cmbLocations = new ComboBox
+            {
+                Location = new System.Drawing.Point(150, 60),
+                Width = 200,
+                DropDownStyle = ComboBoxStyle.DropDownList
             };
-            
-            // Load available locations
             DataTable locations = _workerService.GetAllLocations();
             foreach (DataRow row in locations.Rows)
-            {
                 cmbLocations.Items.Add(new ComboBoxItem(row["Area"].ToString() ?? "", Convert.ToInt32(row["Id"])));
-            }
-            
-            // Select first location by default if available
             if (cmbLocations.Items.Count > 0)
                 cmbLocations.SelectedIndex = 0;
 
-            Label lblPreferredTime = new Label { Text = "Preferred Time:", Location = new System.Drawing.Point(20, 100) };
-            DateTimePicker dtpPreferredTime = new DateTimePicker { Location = new System.Drawing.Point(150, 100), Width = 200 };
+            // Time slot selection
+            Label lblTimeSlot = new Label { Text = "Time Slot:", Location = new System.Drawing.Point(20, 100) };
+            ComboBox cmbTimeSlots = new ComboBox { Location = new System.Drawing.Point(150, 100), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
 
-            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 140), Width = 150 };
+            // Helper to load available time slots for the selected task/location
+            void LoadAvailableTimeSlots()
+            {
+                cmbTimeSlots.Items.Clear();
+                if (cmbLocations.SelectedItem == null) return;
+                int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
+                // Use the new method to get available time slot IDs
+                var availableSlotIds = _workerService.GetAvailableTimeSlotsForTask(taskId, locationId);
+                DataTable slots = _workerService.GetAllTimeSlots();
+                foreach (DataRow row in slots.Rows)
+                {
+                    int slotId = Convert.ToInt32(row["Id"]);
+                    if (availableSlotIds.Contains(slotId))
+                    {
+                        string slotText = $"Day {row["DayOfWeek"]}: {row["StartTime"]}-{row["EndTime"]}";
+                        cmbTimeSlots.Items.Add(new ComboBoxItem(slotText, slotId));
+                    }
+                }
+                if (cmbTimeSlots.Items.Count > 0)
+                    cmbTimeSlots.SelectedIndex = 0;
+            }
+            cmbLocations.SelectedIndexChanged += (s, e) => LoadAvailableTimeSlots();
+            LoadAvailableTimeSlots();
 
+            Button btnSubmit = new Button { Text = "Submit Request", Location = new System.Drawing.Point(150, 160), Width = 150 };
             btnSubmit.Click += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(txtAddress.Text))
@@ -572,21 +594,34 @@ namespace TaskWorkerApp
                     MessageBox.Show("Request address is required.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-
                 if (cmbLocations.SelectedItem == null)
                 {
                     MessageBox.Show("Please select a location area.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-
+                if (cmbTimeSlots.SelectedItem == null)
+                {
+                    MessageBox.Show("Please select a time slot.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 try
                 {
                     int locationId = ((ComboBoxItem)cmbLocations.SelectedItem).Value;
+                    int timeSlotId = ((ComboBoxItem)cmbTimeSlots.SelectedItem).Value;
+                    DataTable slots = _workerService.GetAllTimeSlots();
+                    DataRow slotRow = slots.Rows.Cast<DataRow>().FirstOrDefault(r => Convert.ToInt32(r["Id"]) == timeSlotId);
+                    if (slotRow == null)
+                    {
+                        MessageBox.Show("Invalid time slot.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                    TimeSpan startTime = (TimeSpan)slotRow["StartTime"];
+                    DateTime preferredDateTime = DateTime.Today.Date + startTime;
                     _taskCatalogService.CreateTaskRequest(
-                        taskId, 
-                        _loggedInClientId.Value, 
-                        txtAddress.Text, 
-                        dtpPreferredTime.Value, 
+                        taskId,
+                        _loggedInClientId.Value,
+                        txtAddress.Text,
+                        preferredDateTime,
                         locationId);
                     MessageBox.Show("Task request submitted successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     requestForm.Close();
@@ -601,8 +636,8 @@ namespace TaskWorkerApp
             requestForm.Controls.Add(txtAddress);
             requestForm.Controls.Add(lblLocation);
             requestForm.Controls.Add(cmbLocations);
-            requestForm.Controls.Add(lblPreferredTime);
-            requestForm.Controls.Add(dtpPreferredTime);
+            requestForm.Controls.Add(lblTimeSlot);
+            requestForm.Controls.Add(cmbTimeSlots);
             requestForm.Controls.Add(btnSubmit);
 
             requestForm.ShowDialog();
