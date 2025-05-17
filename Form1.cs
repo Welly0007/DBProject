@@ -135,13 +135,33 @@ namespace TaskWorkerApp
         private void AddBackToMenuButton(TabPage tab)
         {
             Button btnBack = new Button { Text = "Back to Main Menu", Location = new System.Drawing.Point(10, 10), Width = 150 };
+            Button btnSignOut = new Button { Text = "Sign Out", Location = new System.Drawing.Point(170, 10), Width = 100 };
+
             btnBack.Click += (s, e) =>
             {
                 this.Controls.Remove(tabControl!);
                 tabControl = null; // Reset tabControl to ensure proper reinitialization
                 this.Controls.Add(pnlMainMenu!);
             };
+
+            btnSignOut.Click += (s, e) =>
+            {
+                if (MessageBox.Show("Are you sure you want to sign out?", "Sign Out", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    // Reset login state
+                    _loggedInClientId = null;
+                    _loggedInWorkerId = null;
+
+                    this.Controls.Remove(tabControl!);
+                    tabControl = null;
+                    this.Controls.Add(pnlMainMenu!);
+
+                    MessageBox.Show("You have been signed out successfully.", "Sign Out", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            };
+
             tab.Controls.Add(btnBack);
+            tab.Controls.Add(btnSignOut);
         }
 
         private void SetupClientProfileTab(TabPage tab)
@@ -717,17 +737,18 @@ namespace TaskWorkerApp
         {
             AddBackToMenuButton(tab);
             if (_loggedInWorkerId == null) return;
-            
+
             // Increase yOffset to push elements down
             int yOffset = 30;
-            
-            Label lblTitle = new Label { 
-                Text = "Assigned Tasks:", 
-                Location = new System.Drawing.Point(20, 20 + yOffset), 
-                Width = 200, 
-                Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold) 
+
+            Label lblTitle = new Label
+            {
+                Text = "Assigned Tasks:",
+                Location = new System.Drawing.Point(20, 20 + yOffset),
+                Width = 200,
+                Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold)
             };
-            
+
             ListView lvAssigned = new ListView
             {
                 Location = new System.Drawing.Point(20, 50 + yOffset),
