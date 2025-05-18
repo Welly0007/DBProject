@@ -832,19 +832,18 @@ namespace TaskWorkerApp
             lvAssigned.Items.Clear();
             int workerId = _loggedInWorkerId ?? 0;
             var dt = _databaseService.ExecuteQuery(@"
-                SELECT t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status, tr.id as RequestID,
+                SELECT t.TaskName, l.Area, t.AverageFee, tr.Status, tr.id as RequestID,
                        ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes, ta.Status as AssignmentStatus
                 FROM TaskAssignments ta
                 JOIN TaskRequests tr ON ta.RequestID = tr.id
                 JOIN Tasks t ON tr.TaskID = t.id
                 JOIN Locations l ON tr.LocationID = l.id
-                JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
                 WHERE ta.WorkerID = @W AND tr.Status <> 'open'",
                 cmd => cmd.Parameters.AddWithValue("@W", workerId));
 
             foreach (DataRow row in dt.Rows)
             {
-                string slot = $"Day {row["DayOfWeek"]}: {row["StartTime"]}-{row["EndTime"]}";
+                string fee = row["AverageFee"] == DBNull.Value ? "" : Convert.ToDecimal(row["AverageFee"]).ToString("F2");
                 string startedTime = row["StartedTime"] == DBNull.Value ? "" : Convert.ToDateTime(row["StartedTime"]).ToString("g");
                 string duration = string.Empty;
                 if (!(row["ActualDurationMinutes"] is DBNull) && row["ActualDurationMinutes"] != null)
@@ -857,7 +856,7 @@ namespace TaskWorkerApp
                 {
                     row["TaskName"].ToString() ?? "",
                     row["Area"].ToString() ?? "",
-                    slot,
+                    fee,
                     status,
                     row["RequestID"].ToString() ?? "",
                     startedTime,
@@ -888,18 +887,43 @@ namespace TaskWorkerApp
             };
             lvAssigned.Columns.Add("Task Name", 200);
             lvAssigned.Columns.Add("Location", 150);
-            lvAssigned.Columns.Add("Time Slot", 150);
+            lvAssigned.Columns.Add("Fee ($)", 100); // Changed from 'Time Slot' to 'Fee ($)'
             lvAssigned.Columns.Add("Status", 100);
             lvAssigned.Columns.Add("Request ID", 0);
             lvAssigned.Columns.Add("Started Time", 150);
             lvAssigned.Columns.Add("Duration (min)", 120);
             LoadAssignedTasks(lvAssigned);
 
+            // Add label for total money earned
+            Label lblTotalMoney = new Label
+            {
+                Text = "Total Money Earned: $0.00",
+                Location = new System.Drawing.Point(20, 360 + yOffset),
+                Width = 300,
+                Font = new System.Drawing.Font(Font.FontFamily, 10, System.Drawing.FontStyle.Bold)
+            };
+            void UpdateTotalMoney()
+            {
+                int workerId = _loggedInWorkerId ?? 0;
+                var dt = _databaseService.ExecuteQuery(@"
+                    SELECT SUM(t.AverageFee) AS TotalEarned
+                    FROM TaskAssignments ta
+                    JOIN TaskRequests tr ON ta.RequestID = tr.id
+                    JOIN Tasks t ON tr.TaskID = t.id
+                    WHERE ta.WorkerID = @W AND ta.Status = 'completed'",
+                    cmd => cmd.Parameters.AddWithValue("@W", workerId));
+                decimal total = 0;
+                if (dt.Rows.Count > 0 && dt.Rows[0]["TotalEarned"] != DBNull.Value)
+                    total = Convert.ToDecimal(dt.Rows[0]["TotalEarned"]);
+                lblTotalMoney.Text = $"Total Money Earned: ${total:F2}";
+            }
+            UpdateTotalMoney();
+
             // Add "Mark as Completed" button
             Button btnComplete = new Button
             {
                 Text = "Mark as Completed",
-                Location = new System.Drawing.Point(20, 360 + yOffset),
+                Location = new System.Drawing.Point(20, 400 + yOffset),
                 Width = 150,
                 Enabled = false
             };
@@ -908,7 +932,7 @@ namespace TaskWorkerApp
             Button btnInProgress = new Button
             {
                 Text = "Mark as In Progress",
-                Location = new System.Drawing.Point(180, 360 + yOffset),
+                Location = new System.Drawing.Point(180, 400 + yOffset),
                 Width = 170,
                 Enabled = false
             };
@@ -949,6 +973,7 @@ namespace TaskWorkerApp
                         {
                             LoadAssignedTasks(lvAssigned); // Reload from DB to show updated duration/status
                             btnComplete.Enabled = false;
+                            UpdateTotalMoney(); // Update total money after completion
                             MessageBox.Show("Task marked as completed successfully.",
                                             "Success",
                                             MessageBoxButtons.OK,
@@ -1011,6 +1036,7 @@ namespace TaskWorkerApp
 
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvAssigned);
+            tab.Controls.Add(lblTotalMoney);
             tab.Controls.Add(btnComplete);
             tab.Controls.Add(btnInProgress);
         }
