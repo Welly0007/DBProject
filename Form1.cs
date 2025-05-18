@@ -31,7 +31,7 @@ namespace TaskWorkerApp
             InitializeComponent();
             string schemaFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scheme", "initial-schema.sql");
             _databaseService = new DatabaseService(
-                "Server=Welly-pc\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
+                "Server=ALYY;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
                 schemaFilePath);
             _workerService = new WorkerService(_databaseService);
             _clientService = new ClientService(_databaseService);
@@ -563,16 +563,65 @@ namespace TaskWorkerApp
                 Enabled = false
             };
 
+            // Add 'Rate Worker' button
+            Button btnRateWorker = new Button
+            {
+                Text = "Rate Worker",
+                Location = new System.Drawing.Point(180, 370 + yOffset),
+                Width = 150,
+                Enabled = false
+            };
+
             lvRequests.SelectedIndexChanged += (s, e) =>
             {
                 if (lvRequests.SelectedItems.Count > 0)
                 {
+                    string status = lvRequests.SelectedItems[0].SubItems[3].Text;
+                    string worker = lvRequests.SelectedItems[0].SubItems[4].Text;
+                    bool canRateWorker = false;
+                    if (status == "completed" && worker != "Not assigned")
+                    {
+                        int listIndex = lvRequests.SelectedItems[0].Index;
+                        int requestId = -1;
+                        int taskId = -1;
+                        int workerId = -1;
+                        if (dt.Rows.Count > listIndex)
+                        {
+                            requestId = Convert.ToInt32(dt.Rows[listIndex]["id"]);
+                            // Get TaskID for this request
+                            var reqTask = _databaseService.ExecuteQuery("SELECT TaskID FROM TaskRequests WHERE id = @R", cmd => cmd.Parameters.AddWithValue("@R", requestId));
+                            if (reqTask.Rows.Count > 0)
+                                taskId = Convert.ToInt32(reqTask.Rows[0]["TaskID"]);
+                            if (dt.Rows[listIndex]["WorkerName"] != DBNull.Value)
+                            {
+                                var workerNameDb = dt.Rows[listIndex]["WorkerName"].ToString();
+                                var wdt = _databaseService.ExecuteQuery("SELECT id FROM Workers WHERE Name = @N", cmd => cmd.Parameters.AddWithValue("@N", workerNameDb));
+                                if (wdt.Rows.Count > 0)
+                                    workerId = Convert.ToInt32(wdt.Rows[0]["id"]);
+                            }
+                        }
+                        // Check if a WorkerRating already exists for this TaskID, WorkerID, and ClientID
+                        if (taskId != -1 && workerId != -1 && _loggedInClientId != null)
+                        {
+                            var wrdt = _databaseService.ExecuteQuery("SELECT 1 FROM WorkerRatings WHERE WorkerID = @W AND TaskID = @T AND EXISTS (SELECT 1 FROM TaskRequests WHERE id = @R AND ClientID = @C AND TaskID = @T)", cmd =>
+                            {
+                                cmd.Parameters.AddWithValue("@W", workerId);
+                                cmd.Parameters.AddWithValue("@T", taskId);
+                                cmd.Parameters.AddWithValue("@C", _loggedInClientId.Value);
+                                cmd.Parameters.AddWithValue("@R", requestId);
+                            });
+                            canRateWorker = wrdt.Rows.Count == 0;
+                        }
+                    }
+                    btnRateWorker.Enabled = canRateWorker;
+                    // Feedback button logic remains unchanged
                     string rating = lvRequests.SelectedItems[0].SubItems[7].Text;
                     btnShowFeedback.Enabled = rating != "Not rated";
                 }
                 else
                 {
                     btnShowFeedback.Enabled = false;
+                    btnRateWorker.Enabled = false;
                 }
             };
 
@@ -585,9 +634,80 @@ namespace TaskWorkerApp
                 }
             };
 
+            btnRateWorker.Click += (s, e) =>
+            {
+                if (lvRequests.SelectedItems.Count == 0) return;
+                var item = lvRequests.SelectedItems[0];
+                string workerName = item.SubItems[4].Text;
+                if (workerName == "Not assigned")
+                {
+                    MessageBox.Show("No worker assigned to this task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                // Get IDs for rating
+                // Use the request's unique ID from the query (hidden, but available in the DataTable)
+                int listIndex = item.Index;
+                // Get the requestId from the DataTable (dt)
+                int requestId = -1;
+                int workerId = -1;
+                int taskId = -1;
+                if (dt.Rows.Count > listIndex)
+                {
+                    requestId = Convert.ToInt32(dt.Rows[listIndex]["id"]);
+                    // Get TaskID for this request
+                    var reqTask = _databaseService.ExecuteQuery("SELECT TaskID FROM TaskRequests WHERE id = @R", cmd => cmd.Parameters.AddWithValue("@R", requestId));
+                    if (reqTask.Rows.Count > 0)
+                        taskId = Convert.ToInt32(reqTask.Rows[0]["TaskID"]);
+                    if (dt.Rows[listIndex]["WorkerName"] != DBNull.Value)
+                    {
+                        var workerNameDb = dt.Rows[listIndex]["WorkerName"].ToString();
+                        var wdt = _databaseService.ExecuteQuery("SELECT id FROM Workers WHERE Name = @N", cmd => cmd.Parameters.AddWithValue("@N", workerNameDb));
+                        if (wdt.Rows.Count > 0)
+                            workerId = Convert.ToInt32(wdt.Rows[0]["id"]);
+                    }
+                }
+                if (requestId == -1 || workerId == -1 || taskId == -1)
+                {
+                    MessageBox.Show("Could not find worker assignment for this request.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                // Show rating dialog
+                Form rateForm = new Form { Text = $"Rate Worker: {workerName}", Size = new System.Drawing.Size(350, 250), StartPosition = FormStartPosition.CenterParent };
+                Label lbl = new Label { Text = "Rating (1-5):", Location = new System.Drawing.Point(20, 20) };
+                NumericUpDown nud = new NumericUpDown { Minimum = 1, Maximum = 5, Location = new System.Drawing.Point(120, 20), Width = 50 };
+                Label lblFb = new Label { Text = "Feedback:", Location = new System.Drawing.Point(20, 60) };
+                TextBox txtFb = new TextBox { Location = new System.Drawing.Point(20, 90), Width = 280, Height = 60, Multiline = true };
+                Button btnSubmit = new Button { Text = "Submit", Location = new System.Drawing.Point(120, 170), Width = 80 };
+                btnSubmit.Click += (s2, e2) =>
+                {
+                    decimal ratingVal = nud.Value;
+                    string feedback = txtFb.Text;
+                    // Save to WorkerRatings with correct TaskID
+                    _databaseService.ExecuteNonQuery(@"INSERT INTO WorkerRatings (WorkerID, TaskID, RatingValue, Date, Feedback) VALUES (@W, @T, @R, GETDATE(), @F)", cmd =>
+                    {
+                        cmd.Parameters.AddWithValue("@W", workerId);
+                        cmd.Parameters.AddWithValue("@T", taskId);
+                        cmd.Parameters.AddWithValue("@R", ratingVal);
+                        cmd.Parameters.AddWithValue("@F", feedback);
+                    });
+                    MessageBox.Show("Thank you for rating the worker!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    rateForm.Close();
+                    // Refresh the list view to show rating
+                    tab.Controls.Clear();
+                    SetupClientRequestsTab(tab);
+                };
+                rateForm.Controls.Add(lbl);
+                rateForm.Controls.Add(nud);
+                rateForm.Controls.Add(lblFb);
+                rateForm.Controls.Add(txtFb);
+                rateForm.Controls.Add(btnSubmit);
+                rateForm.ShowDialog();
+            };
+
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvRequests);
             tab.Controls.Add(btnShowFeedback);
+            tab.Controls.Add(btnRateWorker);
         }
 
         // Class for task items in the dropdown
@@ -933,7 +1053,8 @@ namespace TaskWorkerApp
             lvAssigned.Columns.Add("Request ID", 0);
             lvAssigned.Columns.Add("Started Time", 150);
             lvAssigned.Columns.Add("Duration (min)", 120);
-            LoadAssignedTasks(lvAssigned);
+            lvAssigned.Columns.Add("Rating", 80); // Add rating column
+            LoadAssignedTasksWithRating(lvAssigned);
 
             // Add label for total money earned
             Label lblTotalMoney = new Label
@@ -987,6 +1108,15 @@ namespace TaskWorkerApp
                 Enabled = false
             };
 
+            // Add Show Feedback button
+            Button btnShowFeedback = new Button
+            {
+                Text = "Show Feedback",
+                Location = new System.Drawing.Point(540, 400 + yOffset),
+                Width = 150,
+                Enabled = false
+            };
+
             // Enable/disable buttons based on selection and status
             lvAssigned.SelectedIndexChanged += (s, e) =>
             {
@@ -994,10 +1124,8 @@ namespace TaskWorkerApp
                 {
                     string status = lvAssigned.SelectedItems[0].SubItems[3].Text;
                     int requestId = int.Parse(lvAssigned.SelectedItems[0].SubItems[4].Text);
-
                     btnComplete.Enabled = (status == "assigned" || status == "scheduled" || status == "in_progress");
                     btnInProgress.Enabled = (status == "assigned" || status == "scheduled");
-
                     // Check if the task is completed and not rated
                     var dt = _databaseService.ExecuteQuery(@"
                         SELECT COUNT(1) AS RatingExists
@@ -1006,14 +1134,27 @@ namespace TaskWorkerApp
                         WHERE tr.id = @RequestId",
                         cmd => cmd.Parameters.AddWithValue("@RequestId", requestId));
                     bool isRated = dt.Rows.Count > 0 && Convert.ToInt32(dt.Rows[0]["RatingExists"]) > 0;
-
                     btnRateClient.Enabled = (status == "completed" && !isRated);
+                    // Enable feedback button if feedback exists and SubItems count is valid
+                    bool hasRatingColumn = lvAssigned.SelectedItems[0].SubItems.Count > 7;
+                    string rating = hasRatingColumn ? lvAssigned.SelectedItems[0].SubItems[7].Text : "Not rated";
+                    btnShowFeedback.Enabled = hasRatingColumn && rating != "Not rated" && lvAssigned.SelectedItems[0].Tag != null && !string.IsNullOrEmpty(lvAssigned.SelectedItems[0].Tag?.ToString());
                 }
                 else
                 {
                     btnComplete.Enabled = false;
                     btnInProgress.Enabled = false;
                     btnRateClient.Enabled = false;
+                    btnShowFeedback.Enabled = false;
+                }
+            };
+
+            btnShowFeedback.Click += (s, e) =>
+            {
+                if (lvAssigned.SelectedItems.Count > 0)
+                {
+                    string feedback = lvAssigned.SelectedItems[0].Tag?.ToString() ?? "No feedback available.";
+                    MessageBox.Show(feedback, "Feedback", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
 
@@ -1157,6 +1298,54 @@ namespace TaskWorkerApp
             tab.Controls.Add(btnComplete);
             tab.Controls.Add(btnInProgress);
             tab.Controls.Add(btnRateClient);
+            tab.Controls.Add(btnShowFeedback);
+        }
+
+        // New: LoadAssignedTasksWithRating
+        private void LoadAssignedTasksWithRating(ListView lvAssigned)
+        {
+            lvAssigned.Items.Clear();
+            int workerId = _loggedInWorkerId ?? 0;
+            var dt = _databaseService.ExecuteQuery(@"
+                SELECT t.TaskName, l.Area, t.AverageFee, tr.Status, tr.id as RequestID,
+                       ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes, ta.Status as AssignmentStatus,
+                       wr.RatingValue AS WorkerRating, wr.Feedback AS WorkerFeedback, tr.TaskID
+                FROM TaskAssignments ta
+                JOIN TaskRequests tr ON ta.RequestID = tr.id
+                JOIN Tasks t ON tr.TaskID = t.id
+                JOIN Locations l ON tr.LocationID = l.id
+                LEFT JOIN WorkerRatings wr ON wr.WorkerID = ta.WorkerID AND wr.TaskID = tr.TaskID
+                WHERE ta.WorkerID = @W AND tr.Status <> 'open'",
+                cmd => cmd.Parameters.AddWithValue("@W", workerId));
+
+            foreach (DataRow row in dt.Rows)
+            {
+                string fee = row["AverageFee"] == DBNull.Value ? "" : Convert.ToDecimal(row["AverageFee"]).ToString("F2");
+                string startedTime = row["StartedTime"] == DBNull.Value ? "" : Convert.ToDateTime(row["StartedTime"]).ToString("g");
+                string duration = string.Empty;
+                if (!(row["ActualDurationMinutes"] is DBNull) && row["ActualDurationMinutes"] != null)
+                {
+                    duration = row["ActualDurationMinutes"].ToString() ?? string.Empty;
+                }
+                string status = row["AssignmentStatus"]?.ToString() ?? row["Status"].ToString() ?? "";
+                string rating = (row["WorkerRating"] == DBNull.Value || row["WorkerRating"] == null) ? "Not rated" : row["WorkerRating"].ToString() ?? "Not rated";
+                string feedback = row["WorkerFeedback"]?.ToString() ?? "";
+                var item = new ListViewItem(new[]
+                {
+                    row["TaskName"].ToString() ?? "",
+                    row["Area"].ToString() ?? "",
+                    fee,
+                    status,
+                    row["RequestID"].ToString() ?? "",
+                    startedTime,
+                    duration,
+                    rating // Add rating to the list view
+                })
+                {
+                    Tag = feedback // Store feedback in the Tag property
+                };
+                lvAssigned.Items.Add(item);
+            }
         }
     }
 }
