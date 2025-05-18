@@ -265,16 +265,34 @@ namespace TaskWorkerApp.Services
                 if (taskExists == 0)
                     return false; // Task not assigned to this worker
 
-                // Update task assignment status to completed
+                // Get StartedTime for duration calculation
+                var startedTimeObj = _db.ExecuteQueryScalar(
+                    "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
+                    cmd => {
+                        cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                        cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                    });
+                DateTime? startedTime = (startedTimeObj != DBNull.Value && startedTimeObj != null)
+                    ? (DateTime?)Convert.ToDateTime(startedTimeObj)
+                    : null;
+                int? actualDuration = null;
+                if (startedTime != null)
+                {
+                    actualDuration = (int)Math.Round((DateTime.Now - startedTime.Value).TotalMinutes);
+                }
+
+                // Update task assignment status to completed and save duration
                 _db.ExecuteNonQuery(@"
                     UPDATE TaskAssignments SET 
                         Status = 'completed', 
-                        ActualTimeSlot = @CompletionTime
+                        ActualTimeSlot = @CompletionTime,
+                        ActualDurationMinutes = @ActualDuration
                     WHERE RequestID = @RequestId AND WorkerID = @WorkerId", cmd =>
                 {
                     cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                     cmd.Parameters.AddWithValue("@WorkerId", workerId);
                     cmd.Parameters.AddWithValue("@CompletionTime", DateTime.Now);
+                    cmd.Parameters.AddWithValue("@ActualDuration", (object?)actualDuration ?? DBNull.Value);
                 });
 
                 // Update the task request status
@@ -285,6 +303,57 @@ namespace TaskWorkerApp.Services
                     cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                 });
 
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Method to mark a task as in progress
+        public bool MarkTaskAsInProgress(int taskRequestId, int workerId)
+        {
+            try
+            {
+                // Verify assignment
+                string verifyQuery = @"
+                    SELECT COUNT(1) FROM TaskAssignments ta 
+                    WHERE ta.RequestID = @RequestId AND ta.WorkerID = @WorkerId";
+                int taskExists = Convert.ToInt32(_db.ExecuteQueryScalar(verifyQuery, cmd =>
+                {
+                    cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                    cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                }));
+                if (taskExists == 0)
+                    return false;
+                // Only allow if not already started
+                var started = _db.ExecuteQueryScalar(
+                    "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
+                    cmd => {
+                        cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                        cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                    });
+                if (started != DBNull.Value && started != null)
+                    return false;
+                // Set StartedTime and status
+                _db.ExecuteNonQuery(@"
+                    UPDATE TaskAssignments SET 
+                        StartedTime = @StartedTime, 
+                        Status = 'in_progress'
+                    WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
+                    cmd => {
+                        cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                        cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                        cmd.Parameters.AddWithValue("@StartedTime", DateTime.Now);
+                    });
+                // Update the task request status
+                _db.ExecuteNonQuery(@"
+                    UPDATE TaskRequests SET Status = 'in_progress' 
+                    WHERE id = @RequestId",
+                    cmd => {
+                        cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                    });
                 return true;
             }
             catch
