@@ -148,6 +148,34 @@ namespace TaskWorkerApp.Services
             return true;
         }
 
+        // Assigns a task request to a worker and updates the request status
+        public void AssignTaskRequestToWorker(int requestId, int workerId)
+        {
+            // Check if worker is already busy with an in_progress or scheduled task
+            string checkBusy = @"SELECT COUNT(1) FROM TaskAssignments WHERE WorkerID = @WorkerID AND Status IN ('scheduled', 'in_progress')";
+            int busyCount = Convert.ToInt32(_db.ExecuteQueryScalar(checkBusy, cmd =>
+            {
+                cmd.Parameters.AddWithValue("@WorkerID", workerId);
+            }));
+            if (busyCount > 0)
+            {
+                throw new Exception("This worker is already assigned to a task that is not completed. Please choose another worker.");
+            }
+            // Insert into TaskAssignments
+            string insertAssignment = @"INSERT INTO TaskAssignments (WorkerID, RequestID, Status) VALUES (@WorkerID, @RequestID, 'scheduled')";
+            _db.ExecuteNonQuery(insertAssignment, cmd =>
+            {
+                cmd.Parameters.AddWithValue("@WorkerID", workerId);
+                cmd.Parameters.AddWithValue("@RequestID", requestId);
+            });
+            // Update TaskRequests status to 'assigned'
+            string updateRequest = "UPDATE TaskRequests SET Status = 'assigned' WHERE id = @RequestID";
+            _db.ExecuteNonQuery(updateRequest, cmd =>
+            {
+                cmd.Parameters.AddWithValue("@RequestID", requestId);
+            });
+        }
+
         public DataTable GetAllTasks()
         {
             string query = @"SELECT t.id, t.TaskName, t.AverageDuration, t.AverageFee, s.Name AS Specialty
