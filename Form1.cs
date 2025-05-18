@@ -31,7 +31,7 @@ namespace TaskWorkerApp
             InitializeComponent();
             string schemaFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scheme", "initial-schema.sql");
             _databaseService = new DatabaseService(
-                "Server=ALYY;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
+                "Server=Welly-pc\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
                 schemaFilePath);
             _workerService = new WorkerService(_databaseService);
             _clientService = new ClientService(_databaseService);
@@ -500,17 +500,20 @@ namespace TaskWorkerApp
             lvRequests.Columns.Add("Worker", 150);
             lvRequests.Columns.Add("Requested On", 150);
             lvRequests.Columns.Add("Time Taken (min)", 120);
+            lvRequests.Columns.Add("Rating", 100); // New column for client rating
 
             // Query to get the signed-in client's requests
             string query = @"
                 SELECT tr.id, t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status,
-                       w.Name AS WorkerName, tr.RequestedDateTime, ta.ActualDurationMinutes
+                       w.Name AS WorkerName, tr.RequestedDateTime, ta.ActualDurationMinutes,
+                       cr.RatingValue AS ClientRating, cr.Feedback
                 FROM TaskRequests tr
                 JOIN Tasks t ON tr.TaskID = t.id
                 JOIN Locations l ON tr.LocationID = l.id
                 JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
                 LEFT JOIN TaskAssignments ta ON tr.id = ta.RequestID
                 LEFT JOIN Workers w ON ta.WorkerID = w.id
+                LEFT JOIN ClientRatings cr ON cr.ClientID = tr.ClientID AND cr.TaskID = tr.TaskID
                 WHERE tr.ClientID = @ClientId
                 ORDER BY tr.RequestedDateTime DESC";
             var dt = _databaseService.ExecuteQuery(query, cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value));
@@ -526,8 +529,9 @@ namespace TaskWorkerApp
                 {
                     timeTaken = row["ActualDurationMinutes"].ToString() ?? string.Empty;
                 }
-                // Only show assigned or completed
-                if (status != "assigned" && status != "completed") continue;
+                string rating = row["ClientRating"] == DBNull.Value ? "Not rated" : row["ClientRating"].ToString();
+                string feedback = row["Feedback"]?.ToString() ?? "";
+
                 var item = new ListViewItem(new[]
                 {
                     row["TaskName"].ToString() ?? "",
@@ -536,17 +540,54 @@ namespace TaskWorkerApp
                     status,
                     worker,
                     requestedOn,
-                    timeTaken
-                });
+                    timeTaken,
+                    rating // Add rating to the list view
+                })
+                {
+                    Tag = feedback // Store feedback in the Tag property
+                };
+
                 if (status == "completed")
                     item.BackColor = System.Drawing.Color.PaleGreen;
                 else if (status == "assigned")
                     item.BackColor = System.Drawing.Color.LightSkyBlue;
+
                 lvRequests.Items.Add(item);
             }
 
+            Button btnShowFeedback = new Button
+            {
+                Text = "Show Feedback",
+                Location = new System.Drawing.Point(20, 370 + yOffset),
+                Width = 150,
+                Enabled = false
+            };
+
+            lvRequests.SelectedIndexChanged += (s, e) =>
+            {
+                if (lvRequests.SelectedItems.Count > 0)
+                {
+                    string rating = lvRequests.SelectedItems[0].SubItems[7].Text;
+                    btnShowFeedback.Enabled = rating != "Not rated";
+                }
+                else
+                {
+                    btnShowFeedback.Enabled = false;
+                }
+            };
+
+            btnShowFeedback.Click += (s, e) =>
+            {
+                if (lvRequests.SelectedItems.Count > 0)
+                {
+                    string feedback = lvRequests.SelectedItems[0].Tag?.ToString() ?? "No feedback available.";
+                    MessageBox.Show(feedback, "Feedback", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            };
+
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvRequests);
+            tab.Controls.Add(btnShowFeedback);
         }
 
         // Class for task items in the dropdown
@@ -887,7 +928,7 @@ namespace TaskWorkerApp
             };
             lvAssigned.Columns.Add("Task Name", 200);
             lvAssigned.Columns.Add("Location", 150);
-            lvAssigned.Columns.Add("Fee ($)", 100); // Changed from 'Time Slot' to 'Fee ($)'
+            lvAssigned.Columns.Add("Fee ($)", 100);
             lvAssigned.Columns.Add("Status", 100);
             lvAssigned.Columns.Add("Request ID", 0);
             lvAssigned.Columns.Add("Started Time", 150);
@@ -937,19 +978,42 @@ namespace TaskWorkerApp
                 Enabled = false
             };
 
-            // Enable/disable button based on selection and status
+            // Add "Rate Client" button
+            Button btnRateClient = new Button
+            {
+                Text = "Rate Client",
+                Location = new System.Drawing.Point(360, 400 + yOffset),
+                Width = 150,
+                Enabled = false
+            };
+
+            // Enable/disable buttons based on selection and status
             lvAssigned.SelectedIndexChanged += (s, e) =>
             {
                 if (lvAssigned.SelectedItems.Count > 0)
                 {
                     string status = lvAssigned.SelectedItems[0].SubItems[3].Text;
+                    int requestId = int.Parse(lvAssigned.SelectedItems[0].SubItems[4].Text);
+
                     btnComplete.Enabled = (status == "assigned" || status == "scheduled" || status == "in_progress");
                     btnInProgress.Enabled = (status == "assigned" || status == "scheduled");
+
+                    // Check if the task is completed and not rated
+                    var dt = _databaseService.ExecuteQuery(@"
+                        SELECT COUNT(1) AS RatingExists
+                        FROM ClientRatings cr
+                        JOIN TaskRequests tr ON cr.TaskID = tr.TaskID
+                        WHERE tr.id = @RequestId",
+                        cmd => cmd.Parameters.AddWithValue("@RequestId", requestId));
+                    bool isRated = dt.Rows.Count > 0 && Convert.ToInt32(dt.Rows[0]["RatingExists"]) > 0;
+
+                    btnRateClient.Enabled = (status == "completed" && !isRated);
                 }
                 else
                 {
                     btnComplete.Enabled = false;
                     btnInProgress.Enabled = false;
+                    btnRateClient.Enabled = false;
                 }
             };
 
@@ -1008,23 +1072,7 @@ namespace TaskWorkerApp
                         }
                         else
                         {
-                            // Check if the StartedTime is already set in the DB and show a more helpful message
-                            var startedTimeObj = _databaseService.ExecuteQueryScalar(
-                                "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
-                                cmd =>
-                                {
-                                    cmd.Parameters.AddWithValue("@RequestId", requestId);
-                                    cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value);
-                                });
-                            if (startedTimeObj != DBNull.Value && startedTimeObj != null)
-                            {
-                                MessageBox.Show("Task is currently in progress.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                                LoadAssignedTasks(lvAssigned);
-                            }
-                            else
-                            {
-                                MessageBox.Show("Failed to mark task as in progress. The task may already be in progress or completed.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            }
+                            MessageBox.Show("Failed to mark task as in progress. The task may already be in progress or completed.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
                     catch (Exception ex)
@@ -1034,11 +1082,81 @@ namespace TaskWorkerApp
                 }
             };
 
+            // Handle rate client button click
+            btnRateClient.Click += (s, e) =>
+            {
+                if (lvAssigned.SelectedItems.Count > 0)
+                {
+                    var selectedItem = lvAssigned.SelectedItems[0];
+                    int requestId = int.Parse(selectedItem.SubItems[4].Text); // Get the request ID
+
+                    // Open a form to rate the client
+                    Form rateForm = new Form
+                    {
+                        Text = "Rate Client",
+                        Size = new System.Drawing.Size(400, 300),
+                        StartPosition = FormStartPosition.CenterParent
+                    };
+
+                    Label lblRating = new Label { Text = "Rating (1-5):", Location = new System.Drawing.Point(20, 20) };
+                    NumericUpDown numRating = new NumericUpDown
+                    {
+                        Location = new System.Drawing.Point(150, 20),
+                        Minimum = 1,
+                        Maximum = 5,
+                        Width = 50
+                    };
+
+                    Label lblFeedback = new Label { Text = "Feedback:", Location = new System.Drawing.Point(20, 60) };
+                    TextBox txtFeedback = new TextBox
+                    {
+                        Location = new System.Drawing.Point(150, 60),
+                        Width = 200,
+                        Height = 100,
+                        Multiline = true
+                    };
+
+                    Button btnSubmitRating = new Button
+                    {
+                        Text = "Submit",
+                        Location = new System.Drawing.Point(150, 180),
+                        Width = 100
+                    };
+
+                    btnSubmitRating.Click += (sender, args) =>
+                    {
+                        try
+                        {
+                            decimal ratingValue = numRating.Value;
+                            string feedback = txtFeedback.Text;
+
+                            _workerService.RateClient(requestId, _loggedInWorkerId.Value, ratingValue, feedback);
+
+                            MessageBox.Show("Client rated successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            rateForm.Close();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Error rating client: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    };
+
+                    rateForm.Controls.Add(lblRating);
+                    rateForm.Controls.Add(numRating);
+                    rateForm.Controls.Add(lblFeedback);
+                    rateForm.Controls.Add(txtFeedback);
+                    rateForm.Controls.Add(btnSubmitRating);
+
+                    rateForm.ShowDialog();
+                }
+            };
+
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvAssigned);
             tab.Controls.Add(lblTotalMoney);
             tab.Controls.Add(btnComplete);
             tab.Controls.Add(btnInProgress);
+            tab.Controls.Add(btnRateClient);
         }
     }
 }

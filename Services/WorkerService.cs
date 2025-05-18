@@ -328,16 +328,20 @@ namespace TaskWorkerApp.Services
                 }));
                 if (taskExists == 0)
                     return false;
-                // Only allow if not already started
-                var started = _db.ExecuteQueryScalar(
-                    "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
+
+                // Check the current status of the task assignment
+                var currentStatus = _db.ExecuteQueryScalar(
+                    "SELECT Status FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
                     cmd =>
                     {
                         cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                         cmd.Parameters.AddWithValue("@WorkerId", workerId);
-                    });
-                if (started != DBNull.Value && started != null)
+                    })?.ToString();
+
+                // Only allow marking as in progress if the current status is 'scheduled'
+                if (currentStatus != "scheduled")
                     return false;
+
                 // Set StartedTime and status
                 _db.ExecuteNonQuery(@"
                     UPDATE TaskAssignments SET 
@@ -350,20 +354,31 @@ namespace TaskWorkerApp.Services
                         cmd.Parameters.AddWithValue("@WorkerId", workerId);
                         cmd.Parameters.AddWithValue("@StartedTime", DateTime.Now);
                     });
-                // Update the task request status
-                _db.ExecuteNonQuery(@"
-                    UPDATE TaskRequests SET Status = 'in_progress' 
-                    WHERE id = @RequestId",
-                    cmd =>
-                    {
-                        cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
-                    });
+
                 return true;
             }
             catch
             {
                 return false;
             }
+        }
+
+        public void RateClient(int taskRequestId, int workerId, decimal ratingValue, string feedback)
+        {
+            string query = @"
+                INSERT INTO ClientRatings (ClientID, TaskID, RatingValue, Date, Feedback)
+                SELECT tr.ClientID, tr.TaskID, @RatingValue, GETDATE(), @Feedback
+                FROM TaskRequests tr
+                JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                WHERE tr.id = @RequestId AND ta.WorkerID = @WorkerId";
+
+            _db.ExecuteNonQuery(query, cmd =>
+            {
+                cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
+                cmd.Parameters.AddWithValue("@WorkerId", workerId);
+                cmd.Parameters.AddWithValue("@RatingValue", ratingValue);
+                cmd.Parameters.AddWithValue("@Feedback", feedback);
+            });
         }
 
         public class WorkerProfile
