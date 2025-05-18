@@ -513,7 +513,7 @@ namespace TaskWorkerApp
                 JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
                 LEFT JOIN TaskAssignments ta ON tr.id = ta.RequestID
                 LEFT JOIN Workers w ON ta.WorkerID = w.id
-                LEFT JOIN ClientRatings cr ON cr.ClientID = tr.ClientID AND cr.TaskID = tr.TaskID
+                LEFT JOIN ClientRatings cr ON cr.RequestID = tr.id
                 WHERE tr.ClientID = @ClientId
                 ORDER BY tr.RequestedDateTime DESC";
             var dt = _databaseService.ExecuteQuery(query, cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value));
@@ -600,15 +600,14 @@ namespace TaskWorkerApp
                                     workerId = Convert.ToInt32(wdt.Rows[0]["id"]);
                             }
                         }
-                        // Check if a WorkerRating already exists for this TaskID, WorkerID, and ClientID
-                        if (taskId != -1 && workerId != -1 && _loggedInClientId != null)
+                        // Check if a WorkerRating already exists for this TaskID, WorkerID, and RequestID
+                        if (taskId != -1 && workerId != -1 && _loggedInClientId != null && requestId != -1)
                         {
-                            var wrdt = _databaseService.ExecuteQuery("SELECT 1 FROM WorkerRatings WHERE WorkerID = @W AND TaskID = @T AND EXISTS (SELECT 1 FROM TaskRequests WHERE id = @R AND ClientID = @C AND TaskID = @T)", cmd =>
+                            var wrdt = _databaseService.ExecuteQuery("SELECT 1 FROM WorkerRatings WHERE WorkerID = @W AND TaskID = @T AND RequestID = @RId", cmd =>
                             {
                                 cmd.Parameters.AddWithValue("@W", workerId);
                                 cmd.Parameters.AddWithValue("@T", taskId);
-                                cmd.Parameters.AddWithValue("@C", _loggedInClientId.Value);
-                                cmd.Parameters.AddWithValue("@R", requestId);
+                                cmd.Parameters.AddWithValue("@RId", requestId);
                             });
                             canRateWorker = wrdt.Rows.Count == 0;
                         }
@@ -682,11 +681,12 @@ namespace TaskWorkerApp
                 {
                     decimal ratingVal = nud.Value;
                     string feedback = txtFb.Text;
-                    // Save to WorkerRatings with correct TaskID
-                    _databaseService.ExecuteNonQuery(@"INSERT INTO WorkerRatings (WorkerID, TaskID, RatingValue, Date, Feedback) VALUES (@W, @T, @R, GETDATE(), @F)", cmd =>
+                    // Save to WorkerRatings with correct RequestID (not just TaskID)
+                    _databaseService.ExecuteNonQuery(@"INSERT INTO WorkerRatings (WorkerID, TaskID, RequestID, RatingValue, Date, Feedback) VALUES (@W, @T, @RId, @R, GETDATE(), @F)", cmd =>
                     {
                         cmd.Parameters.AddWithValue("@W", workerId);
                         cmd.Parameters.AddWithValue("@T", taskId);
+                        cmd.Parameters.AddWithValue("@RId", requestId);
                         cmd.Parameters.AddWithValue("@R", ratingVal);
                         cmd.Parameters.AddWithValue("@F", feedback);
                     });
@@ -1130,8 +1130,7 @@ namespace TaskWorkerApp
                     var dt = _databaseService.ExecuteQuery(@"
                         SELECT COUNT(1) AS RatingExists
                         FROM ClientRatings cr
-                        JOIN TaskRequests tr ON cr.TaskID = tr.TaskID
-                        WHERE tr.id = @RequestId",
+                        WHERE cr.RequestID = @RequestId",
                         cmd => cmd.Parameters.AddWithValue("@RequestId", requestId));
                     bool isRated = dt.Rows.Count > 0 && Convert.ToInt32(dt.Rows[0]["RatingExists"]) > 0;
                     btnRateClient.Enabled = (status == "completed" && !isRated);
@@ -1314,7 +1313,7 @@ namespace TaskWorkerApp
                 JOIN TaskRequests tr ON ta.RequestID = tr.id
                 JOIN Tasks t ON tr.TaskID = t.id
                 JOIN Locations l ON tr.LocationID = l.id
-                LEFT JOIN WorkerRatings wr ON wr.WorkerID = ta.WorkerID AND wr.TaskID = tr.TaskID
+                LEFT JOIN WorkerRatings wr ON wr.WorkerID = ta.WorkerID AND wr.TaskID = tr.TaskID AND wr.RequestID = tr.id
                 WHERE ta.WorkerID = @W AND tr.Status <> 'open'",
                 cmd => cmd.Parameters.AddWithValue("@W", workerId));
 
