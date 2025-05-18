@@ -31,7 +31,7 @@ namespace TaskWorkerApp
             InitializeComponent();
             string schemaFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scheme", "initial-schema.sql");
             _databaseService = new DatabaseService(
-                "Server=ALYY;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
+                "Server=Welly-pc\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;",
                 schemaFilePath);
             _workerService = new WorkerService(_databaseService);
             _clientService = new ClientService(_databaseService);
@@ -271,6 +271,111 @@ namespace TaskWorkerApp
                 ShowLoginUI();
             };
 
+            // Add "Generate Report" button (visible only when logged in)
+            Button btnGenerateReport = new Button
+            {
+                Text = "Generate Report",
+                Location = new System.Drawing.Point(170, 400 + yOffset),
+                Width = 150,
+                Visible = _loggedInClientId != null
+            };
+
+            btnGenerateReport.Click += (s, e) =>
+            {
+                if (_loggedInClientId == null) return;
+
+                Form reportForm = new Form
+                {
+                    Text = "Client Report",
+                    Size = new System.Drawing.Size(800, 600),
+                    StartPosition = FormStartPosition.CenterParent
+                };
+
+                ListView lvReport = new ListView
+                {
+                    Dock = DockStyle.Fill,
+                    View = View.Details,
+                    FullRowSelect = true
+                };
+
+                lvReport.Columns.Add("Metric", 300);
+                lvReport.Columns.Add("Value", 400);
+
+                // Query and populate report data
+                var totalRequests = _databaseService.ExecuteQueryScalar(
+                    "SELECT COUNT(*) FROM TaskRequests WHERE ClientID = @ClientId",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
+
+                var completedRequests = _databaseService.ExecuteQueryScalar(
+                    "SELECT COUNT(*) FROM TaskRequests WHERE ClientID = @ClientId AND Status = 'completed'",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
+
+                var totalMoneySpent = _databaseService.ExecuteQueryScalar(@"
+                    SELECT ISNULL(SUM(t.AverageFee), 0)
+                    FROM TaskRequests tr
+                    JOIN Tasks t ON tr.TaskID = t.id
+                    WHERE tr.ClientID = @ClientId AND tr.Status = 'completed'",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
+
+                var mostDealtWorker = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 w.Name
+                    FROM TaskRequests tr
+                    JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                    JOIN Workers w ON ta.WorkerID = w.id
+                    WHERE tr.ClientID = @ClientId
+                    GROUP BY w.Name
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "N/A";
+
+                var averageRating = _databaseService.ExecuteQueryScalar(@"
+                    SELECT ISNULL(AVG(RatingValue), 0)
+                    FROM ClientRatings
+                    WHERE RequestID IN (SELECT id FROM TaskRequests WHERE ClientID = @ClientId)",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
+
+                var mostRequestedSpecialty = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 s.Name
+                    FROM TaskRequests tr
+                    JOIN Tasks t ON tr.TaskID = t.id
+                    JOIN Specialties s ON t.SpecialtyID = s.id
+                    WHERE tr.ClientID = @ClientId
+                    GROUP BY s.Name
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "N/A";
+
+                var mostCondensedLocation = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 l.Area
+                    FROM TaskRequests tr
+                    JOIN Locations l ON tr.LocationID = l.id
+                    WHERE tr.ClientID = @ClientId
+                    GROUP BY l.Area
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "N/A";
+
+                var busiestTimeslot = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 CONCAT('Day ', ts.DayOfWeek, ': ', ts.StartTime, '-', ts.EndTime)
+                    FROM TaskRequests tr
+                    JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
+                    WHERE tr.ClientID = @ClientId
+                    GROUP BY ts.DayOfWeek, ts.StartTime, ts.EndTime
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "N/A";
+
+                lvReport.Items.Add(new ListViewItem(new[] { "Total Requests", totalRequests }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Completed Requests", completedRequests }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Total Money Spent ($)", totalMoneySpent }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Dealt Worker", mostDealtWorker }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Your Average Rating", averageRating }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Requested Specialty", mostRequestedSpecialty }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Condensed Location", mostCondensedLocation }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Busiest Timeslot", busiestTimeslot }));
+
+                reportForm.Controls.Add(lvReport);
+                reportForm.ShowDialog();
+            };
+
+            tab.Controls.Add(btnGenerateReport);
+
             // Add controls to tab
             tab.Controls.Add(btnLogin);
             tab.Controls.Add(btnCreate);
@@ -373,6 +478,115 @@ namespace TaskWorkerApp
                     MessageBox.Show("Profile updated.");
                 }
             };
+
+            // Add "Generate Report" button (visible only when logged in)
+            Button btnGenerateReport = new Button
+            {
+                Text = "Generate Report",
+                Location = new System.Drawing.Point(170, 450 + yOffset),
+                Width = 150,
+                Visible = _loggedInWorkerId != null
+            };
+
+            btnGenerateReport.Click += (s, e) =>
+            {
+                if (_loggedInWorkerId == null) return;
+
+                Form reportForm = new Form
+                {
+                    Text = "Worker Report",
+                    Size = new System.Drawing.Size(800, 600),
+                    StartPosition = FormStartPosition.CenterParent
+                };
+
+                ListView lvReport = new ListView
+                {
+                    Dock = DockStyle.Fill,
+                    View = View.Details,
+                    FullRowSelect = true
+                };
+
+                lvReport.Columns.Add("Metric", 300);
+                lvReport.Columns.Add("Value", 400);
+
+                // Query and populate report data
+                var totalTasks = _databaseService.ExecuteQueryScalar(
+                    "SELECT COUNT(*) FROM TaskAssignments WHERE WorkerID = @WorkerId",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "0";
+
+                var completedTasks = _databaseService.ExecuteQueryScalar(
+                    "SELECT COUNT(*) FROM TaskAssignments WHERE WorkerID = @WorkerId AND Status = 'completed'",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "0";
+
+                var totalMoneyEarned = _databaseService.ExecuteQueryScalar(@"
+                    SELECT ISNULL(SUM(t.AverageFee), 0)
+                    FROM TaskAssignments ta
+                    JOIN TaskRequests tr ON ta.RequestID = tr.id
+                    JOIN Tasks t ON tr.TaskID = t.id
+                    WHERE ta.WorkerID = @WorkerId AND ta.Status = 'completed'",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "0";
+
+                var mostFrequentClient = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 c.Name
+                    FROM TaskRequests tr
+                    JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                    JOIN Clients c ON tr.ClientID = c.id
+                    WHERE ta.WorkerID = @WorkerId
+                    GROUP BY c.Name
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "N/A";
+
+                var averageClientRating = _databaseService.ExecuteQueryScalar(@"
+                    SELECT ISNULL(AVG(RatingValue), 0)
+                    FROM WorkerRatings
+                    WHERE RequestID IN (SELECT RequestID FROM TaskAssignments WHERE WorkerID = @WorkerId)",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "0";
+
+                var mostRequestedSpecialty = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 s.Name
+                    FROM TaskRequests tr
+                    JOIN Tasks t ON tr.TaskID = t.id
+                    JOIN Specialties s ON t.SpecialtyID = s.id
+                    JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                    WHERE ta.WorkerID = @WorkerId
+                    GROUP BY s.Name
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "N/A";
+
+                var mostCondensedLocation = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 l.Area
+                    FROM TaskRequests tr
+                    JOIN Locations l ON tr.LocationID = l.id
+                    JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                    WHERE ta.WorkerID = @WorkerId
+                    GROUP BY l.Area
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "N/A";
+
+                var busiestTimeslot = _databaseService.ExecuteQueryScalar(@"
+                    SELECT TOP 1 CONCAT('Day ', ts.DayOfWeek, ': ', ts.StartTime, '-', ts.EndTime)
+                    FROM TaskRequests tr
+                    JOIN TimeSlots ts ON tr.PreferredTimeSlot = ts.id
+                    JOIN TaskAssignments ta ON tr.id = ta.RequestID
+                    WHERE ta.WorkerID = @WorkerId
+                    GROUP BY ts.DayOfWeek, ts.StartTime, ts.EndTime
+                    ORDER BY COUNT(*) DESC",
+                    cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "N/A";
+
+                lvReport.Items.Add(new ListViewItem(new[] { "Total Tasks", totalTasks }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Completed Tasks", completedTasks }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Total Money Earned ($)", totalMoneyEarned }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Frequent Client", mostFrequentClient }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Average Client Rating", averageClientRating }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Requested Specialty", mostRequestedSpecialty }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Most Condensed Location", mostCondensedLocation }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Busiest Timeslot", busiestTimeslot }));
+
+                reportForm.Controls.Add(lvReport);
+                reportForm.ShowDialog();
+            };
+
+            tab.Controls.Add(btnGenerateReport);
 
             tab.Controls.Add(lblName); tab.Controls.Add(txtName);
             tab.Controls.Add(lblPhone); tab.Controls.Add(txtPhone);
@@ -704,6 +918,9 @@ namespace TaskWorkerApp
                 rateForm.ShowDialog();
             };
 
+            tab.Controls.Add(btnShowFeedback);
+
+            // Add controls to tab
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvRequests);
             tab.Controls.Add(btnShowFeedback);
