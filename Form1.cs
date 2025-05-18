@@ -695,6 +695,19 @@ namespace TaskWorkerApp
                         MessageBox.Show("Task request submitted, but no available worker was found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     requestForm.Close();
+                    // Refresh 'My Requests' tab if it is open
+                    if (tabControl != null)
+                    {
+                        foreach (TabPage tab in tabControl.TabPages)
+                        {
+                            if (tab.Text == "My Requests")
+                            {
+                                tab.Controls.Clear();
+                                SetupClientRequestsTab(tab);
+                                break;
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
