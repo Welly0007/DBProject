@@ -820,7 +820,7 @@ namespace TaskWorkerApp
             int workerId = _loggedInWorkerId ?? 0;
             var dt = _databaseService.ExecuteQuery(@"
                 SELECT t.TaskName, l.Area, ts.DayOfWeek, ts.StartTime, ts.EndTime, tr.Status, tr.id as RequestID,
-                       ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes
+                       ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes, ta.Status as AssignmentStatus
                 FROM TaskAssignments ta
                 JOIN TaskRequests tr ON ta.RequestID = tr.id
                 JOIN Tasks t ON tr.TaskID = t.id
@@ -838,12 +838,14 @@ namespace TaskWorkerApp
                 {
                     duration = row["ActualDurationMinutes"].ToString() ?? string.Empty;
                 }
+                // Use the assignment status (from TaskAssignments) for the UI, not the request status
+                string status = row["AssignmentStatus"]?.ToString() ?? row["Status"].ToString() ?? "";
                 var item = new ListViewItem(new[]
                 {
                     row["TaskName"].ToString() ?? "",
                     row["Area"].ToString() ?? "",
                     slot,
-                    row["Status"].ToString() ?? "",
+                    status,
                     row["RequestID"].ToString() ?? "",
                     startedTime,
                     duration
@@ -971,7 +973,8 @@ namespace TaskWorkerApp
                             // Check if the StartedTime is already set in the DB and show a more helpful message
                             var startedTimeObj = _databaseService.ExecuteQueryScalar(
                                 "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
-                                cmd => {
+                                cmd =>
+                                {
                                     cmd.Parameters.AddWithValue("@RequestId", requestId);
                                     cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value);
                                 });

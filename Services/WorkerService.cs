@@ -268,7 +268,8 @@ namespace TaskWorkerApp.Services
                 // Get StartedTime for duration calculation
                 var startedTimeObj = _db.ExecuteQueryScalar(
                     "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
-                    cmd => {
+                    cmd =>
+                    {
                         cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                         cmd.Parameters.AddWithValue("@WorkerId", workerId);
                     });
@@ -330,7 +331,8 @@ namespace TaskWorkerApp.Services
                 // Only allow if not already started
                 var started = _db.ExecuteQueryScalar(
                     "SELECT StartedTime FROM TaskAssignments WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
-                    cmd => {
+                    cmd =>
+                    {
                         cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                         cmd.Parameters.AddWithValue("@WorkerId", workerId);
                     });
@@ -342,7 +344,8 @@ namespace TaskWorkerApp.Services
                         StartedTime = @StartedTime, 
                         Status = 'in_progress'
                     WHERE RequestID = @RequestId AND WorkerID = @WorkerId",
-                    cmd => {
+                    cmd =>
+                    {
                         cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                         cmd.Parameters.AddWithValue("@WorkerId", workerId);
                         cmd.Parameters.AddWithValue("@StartedTime", DateTime.Now);
@@ -351,7 +354,8 @@ namespace TaskWorkerApp.Services
                 _db.ExecuteNonQuery(@"
                     UPDATE TaskRequests SET Status = 'in_progress' 
                     WHERE id = @RequestId",
-                    cmd => {
+                    cmd =>
+                    {
                         cmd.Parameters.AddWithValue("@RequestId", taskRequestId);
                     });
                 return true;
