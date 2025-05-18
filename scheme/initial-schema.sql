@@ -123,11 +123,13 @@ CREATE TABLE WorkerRatings (
     id INT PRIMARY KEY IDENTITY(1,1),
     WorkerID INT NOT NULL,
     TaskID INT NOT NULL,
+    RequestID INT NOT NULL,
     RatingValue DECIMAL(3,2),
     Date DATE,
     Feedback NVARCHAR(MAX),
     FOREIGN KEY (WorkerID) REFERENCES Workers(id),
-    FOREIGN KEY (TaskID) REFERENCES Tasks(id)
+    FOREIGN KEY (TaskID) REFERENCES Tasks(id),
+    FOREIGN KEY (RequestID) REFERENCES TaskRequests(id)
 );
 
 -- Create ClientRating table
@@ -135,13 +137,14 @@ CREATE TABLE ClientRatings (
     id INT PRIMARY KEY IDENTITY(1,1),
     ClientID INT NOT NULL,
     TaskID INT NOT NULL,
+    RequestID INT NOT NULL,
     RatingValue DECIMAL(3,2),
     Date DATE,
     Feedback NVARCHAR(MAX),
     FOREIGN KEY (ClientID) REFERENCES Clients(id),
-    FOREIGN KEY (TaskID) REFERENCES Tasks(id)
+    FOREIGN KEY (TaskID) REFERENCES Tasks(id),
+    FOREIGN KEY (RequestID) REFERENCES TaskRequests(id)
 );
-
 
 -- Dummy data for Specialties
 INSERT INTO Specialties ([Name]) VALUES ('Plumbing');

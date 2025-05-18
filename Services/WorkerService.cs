@@ -366,8 +366,8 @@ namespace TaskWorkerApp.Services
         public void RateClient(int taskRequestId, int workerId, decimal ratingValue, string feedback)
         {
             string query = @"
-                INSERT INTO ClientRatings (ClientID, TaskID, RatingValue, Date, Feedback)
-                SELECT tr.ClientID, tr.TaskID, @RatingValue, GETDATE(), @Feedback
+                INSERT INTO ClientRatings (ClientID, TaskID, RequestID, RatingValue, Date, Feedback)
+                SELECT tr.ClientID, tr.TaskID, tr.id, @RatingValue, GETDATE(), @Feedback
                 FROM TaskRequests tr
                 JOIN TaskAssignments ta ON tr.id = ta.RequestID
                 WHERE tr.id = @RequestId AND ta.WorkerID = @WorkerId";
