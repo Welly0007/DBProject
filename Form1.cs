@@ -857,10 +857,9 @@ namespace TaskWorkerApp
                     MessageBox.Show("No worker assigned to this task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                // Get IDs for rating
-                // Use the request's unique ID from the query (hidden, but available in the DataTable)
+
+
                 int listIndex = item.Index;
-                // Get the requestId from the DataTable (dt)
                 int requestId = -1;
                 int workerId = -1;
                 int taskId = -1;
@@ -871,6 +870,7 @@ namespace TaskWorkerApp
                     var reqTask = _databaseService.ExecuteQuery("SELECT TaskID FROM TaskRequests WHERE id = @R", cmd => cmd.Parameters.AddWithValue("@R", requestId));
                     if (reqTask.Rows.Count > 0)
                         taskId = Convert.ToInt32(reqTask.Rows[0]["TaskID"]);
+                    // Get WorkerID for this request
                     if (dt.Rows[listIndex]["WorkerName"] != DBNull.Value)
                     {
                         var workerNameDb = dt.Rows[listIndex]["WorkerName"].ToString();
@@ -895,7 +895,7 @@ namespace TaskWorkerApp
                 {
                     decimal ratingVal = nud.Value;
                     string feedback = txtFb.Text;
-                    // Save to WorkerRatings with correct RequestID (not just TaskID)
+                    // Save to WorkerRatings with correct RequestID 
                     _databaseService.ExecuteNonQuery(@"INSERT INTO WorkerRatings (WorkerID, TaskID, RequestID, RatingValue, Date, Feedback) VALUES (@W, @T, @RId, @R, GETDATE(), @F)", cmd =>
                     {
                         cmd.Parameters.AddWithValue("@W", workerId);
@@ -906,7 +906,6 @@ namespace TaskWorkerApp
                     });
                     MessageBox.Show("Thank you for rating the worker!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     rateForm.Close();
-                    // Refresh the list view to show rating
                     tab.Controls.Clear();
                     SetupClientRequestsTab(tab);
                 };
