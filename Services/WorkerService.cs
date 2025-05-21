@@ -41,19 +41,17 @@ namespace TaskWorkerApp.Services
             string email = dt.Rows.Count > 0 ? dt.Rows[0]["Email"].ToString() ?? "" : "";
 
             var specialtyIds = new List<int>();
-            var dtSpec = _db.ExecuteQuery($"SELECT SpecialtyID FROM WorkerSpecialty WHERE WorkerID = {workerId}");
-            foreach (DataRow row in dtSpec.Rows)
-                specialtyIds.Add(Convert.ToInt32(row["SpecialtyID"]));
-
             var locationIds = new List<int>();
             var timeSlotIds = new List<int>();
-            var dtAvail = _db.ExecuteQuery($"SELECT DISTINCT LocationID, TimeSlotID FROM WorkerAvailability WHERE WorkerID = {workerId}");
+            var dtAvail = _db.ExecuteQuery($"SELECT LocationID, TimeSlotID, SpecialtyID FROM WorkerAvailability WHERE WorkerID = {workerId}");
             foreach (DataRow row in dtAvail.Rows)
             {
                 int locId = Convert.ToInt32(row["LocationID"]);
                 int tsId = Convert.ToInt32(row["TimeSlotID"]);
+                int specId = Convert.ToInt32(row["SpecialtyID"]);
                 if (!locationIds.Contains(locId)) locationIds.Add(locId);
                 if (!timeSlotIds.Contains(tsId)) timeSlotIds.Add(tsId);
+                if (!specialtyIds.Contains(specId)) specialtyIds.Add(specId);
             }
 
             return new WorkerProfile
@@ -92,16 +90,6 @@ namespace TaskWorkerApp.Services
                 });
             }
 
-            _db.ExecuteNonQuery("DELETE FROM WorkerSpecialty WHERE WorkerID = @W", cmd => cmd.Parameters.AddWithValue("@W", workerId.Value));
-            foreach (var sid in specialtyIds)
-            {
-                _db.ExecuteNonQuery("INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (@W, @S)", cmd =>
-                {
-                    cmd.Parameters.AddWithValue("@W", workerId.Value);
-                    cmd.Parameters.AddWithValue("@S", sid);
-                });
-            }
-
             _db.ExecuteNonQuery("DELETE FROM WorkerAvailability WHERE WorkerID = @W", cmd => cmd.Parameters.AddWithValue("@W", workerId.Value));
             if (specialtyIds.Count > 0 && locationIds.Count > 0 && timeSlotIds.Count > 0)
             {
@@ -124,57 +112,6 @@ namespace TaskWorkerApp.Services
                     }
                 }
             }
-        }
-
-        public List<int> GetAvailableWorkersForTask(int taskId, int locationId, DateTime preferredDateTime)
-        {
-            // Get the specialty required for the task
-            var dtTask = _db.ExecuteQuery("SELECT SpecialtyID FROM Tasks WHERE Id = @TaskId", cmd =>
-            {
-                cmd.Parameters.AddWithValue("@TaskId", taskId);
-            });
-            if (dtTask.Rows.Count == 0) return new List<int>();
-            int specialtyId = Convert.ToInt32(dtTask.Rows[0]["SpecialtyID"]);
-
-            // Find the matching time slot
-            int dayOfWeek = (int)preferredDateTime.DayOfWeek;
-            if (dayOfWeek == 0) dayOfWeek = 7; // SQL: 1=Monday, C#: 0=Sunday
-            TimeSpan time = preferredDateTime.TimeOfDay;
-            var dtSlot = _db.ExecuteQuery("SELECT Id FROM TimeSlots WHERE DayOfWeek = @Day AND StartTime <= @Time AND EndTime > @Time", cmd =>
-            {
-                cmd.Parameters.AddWithValue("@Day", dayOfWeek);
-                cmd.Parameters.AddWithValue("@Time", time);
-            });
-            if (dtSlot.Rows.Count == 0) return new List<int>();
-            int timeSlotId = Convert.ToInt32(dtSlot.Rows[0]["Id"]);
-
-            // Find workers available for this slot, location, and specialty
-            var dtWorkers = _db.ExecuteQuery(@"
-                SELECT wa.WorkerID
-                FROM WorkerAvailability wa
-                WHERE wa.TimeSlotID = @TimeSlotId
-                  AND wa.LocationID = @LocationId
-                  AND wa.SpecialtyID = @SpecialtyId
-                  AND NOT EXISTS (
-                      SELECT 1 FROM TaskAssignments ta
-                      JOIN TaskRequests tr ON ta.RequestID = tr.id
-                      WHERE ta.WorkerID = wa.WorkerID
-                        AND tr.LocationID = @LocationId
-                        AND tr.RequestedDateTime = @PrefDate
-                        AND ta.Status IN ('scheduled', 'in_progress')
-                  )
-                GROUP BY wa.WorkerID
-            ", cmd =>
-            {
-                cmd.Parameters.AddWithValue("@TimeSlotId", timeSlotId);
-                cmd.Parameters.AddWithValue("@LocationId", locationId);
-                cmd.Parameters.AddWithValue("@SpecialtyId", specialtyId);
-                cmd.Parameters.AddWithValue("@PrefDate", preferredDateTime);
-            });
-            var result = new List<int>();
-            foreach (DataRow row in dtWorkers.Rows)
-                result.Add(Convert.ToInt32(row["WorkerID"]));
-            return result;
         }
 
         // New overload: get available workers for a specific time slot

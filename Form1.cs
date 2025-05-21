@@ -577,7 +577,7 @@ namespace TaskWorkerApp
                 lvReport.Items.Add(new ListViewItem(new[] { "Completed Tasks", completedTasks }));
                 lvReport.Items.Add(new ListViewItem(new[] { "Total Money Earned ($)", totalMoneyEarned }));
                 lvReport.Items.Add(new ListViewItem(new[] { "Most Frequent Client", mostFrequentClient }));
-                lvReport.Items.Add(new ListViewItem(new[] { "Average Client Rating", averageClientRating }));
+                lvReport.Items.Add(new ListViewItem(new[] { "Your Average Rating", averageClientRating }));
                 lvReport.Items.Add(new ListViewItem(new[] { "Most Requested Specialty", mostRequestedSpecialty }));
                 lvReport.Items.Add(new ListViewItem(new[] { "Most Condensed Location", mostCondensedLocation }));
                 lvReport.Items.Add(new ListViewItem(new[] { "Busiest Timeslot", busiestTimeslot }));

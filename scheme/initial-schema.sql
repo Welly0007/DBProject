@@ -27,13 +27,13 @@ CREATE TABLE Specialties (
 );
 
 -- Create junction table for Worker-Specialty many-to-many relationship
-CREATE TABLE WorkerSpecialty (
-    WorkerID INT NOT NULL,
-    SpecialtyID INT NOT NULL,
-    PRIMARY KEY (WorkerID, SpecialtyID),
-    FOREIGN KEY (WorkerID) REFERENCES Workers(id),
-    FOREIGN KEY (SpecialtyID) REFERENCES Specialties(id)
-);
+-- CREATE TABLE WorkerSpecialty (
+--     WorkerID INT NOT NULL,
+--     SpecialtyID INT NOT NULL,
+--     PRIMARY KEY (WorkerID, SpecialtyID),
+--     FOREIGN KEY (WorkerID) REFERENCES Workers(id),
+--     FOREIGN KEY (SpecialtyID) REFERENCES Specialties(id)
+-- );
 
 -- Create TimeSlot table
 CREATE TABLE TimeSlots (
@@ -183,8 +183,8 @@ VALUES ('Test Worker', '0987654321', 'worker@test.com');
 --         TimeSlot IDs: 1, 2, 3, 4
 
 -- Assign specialties (Plumbing and Electrical) to test worker
-INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 1);
-INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 2);
+-- INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 1);
+-- INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 2);
 
 -- Assign availability for test worker: all combinations of specialties, locations, and time slots
 INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (1, 1, 1, 1);
