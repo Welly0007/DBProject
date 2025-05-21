@@ -301,7 +301,7 @@ namespace TaskWorkerApp
                 lvReport.Columns.Add("Metric", 300);
                 lvReport.Columns.Add("Value", 400);
 
-                // Query and populate report data
+                // Query to get report data
                 var totalRequests = _databaseService.ExecuteQueryScalar(
                     "SELECT COUNT(*) FROM TaskRequests WHERE ClientID = @ClientId",
                     cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
@@ -330,7 +330,7 @@ namespace TaskWorkerApp
                 var averageRating = _databaseService.ExecuteQueryScalar(@"
                     SELECT ISNULL(AVG(RatingValue), 0)
                     FROM ClientRatings
-                    WHERE RequestID IN (SELECT id FROM TaskRequests WHERE ClientID = @ClientId)",
+                    WHERE ClientID = @ClientId",
                     cmd => cmd.Parameters.AddWithValue("@ClientId", _loggedInClientId.Value))?.ToString() ?? "0";
 
                 var mostRequestedSpecialty = _databaseService.ExecuteQueryScalar(@"
@@ -539,7 +539,7 @@ namespace TaskWorkerApp
                 var averageClientRating = _databaseService.ExecuteQueryScalar(@"
                     SELECT ISNULL(AVG(RatingValue), 0)
                     FROM WorkerRatings
-                    WHERE RequestID IN (SELECT RequestID FROM TaskAssignments WHERE WorkerID = @WorkerId)",
+                    WHERE workerID = @WorkerId",
                     cmd => cmd.Parameters.AddWithValue("@WorkerId", _loggedInWorkerId.Value))?.ToString() ?? "0";
 
                 var mostRequestedSpecialty = _databaseService.ExecuteQueryScalar(@"
@@ -1209,6 +1209,8 @@ namespace TaskWorkerApp
         {
             lvAssigned.Items.Clear();
             int workerId = _loggedInWorkerId ?? 0;
+            // load all assigned tasks and while joining with task requests, then join with tasks to get specific details
+            // only join tasks that are not opened and is assigned to this worker id
             var dt = _databaseService.ExecuteQuery(@"
                 SELECT t.TaskName, l.Area, t.AverageFee, tr.Status, tr.id as RequestID,
                        ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes, ta.Status as AssignmentStatus
