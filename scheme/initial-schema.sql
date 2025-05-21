@@ -107,7 +107,7 @@ CREATE TABLE TaskAssignments (
     id INT PRIMARY KEY IDENTITY(1,1),
     WorkerID INT NOT NULL,
     RequestID INT NOT NULL,
-    ActualTimeSlot DATETIME,
+    ActualTimeSlot DATETIME, --endtime of the task
     StartedTime DATETIME NULL,
     ActualDurationMinutes INT,
     WorkerRating DECIMAL(3,2),
