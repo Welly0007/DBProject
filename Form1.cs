@@ -1204,47 +1204,6 @@ namespace TaskWorkerApp
             btnSubmit.Visible = false;
         }
 
-        private void LoadAssignedTasks(ListView lvAssigned)
-        {
-            lvAssigned.Items.Clear();
-            int workerId = _loggedInWorkerId ?? 0;
-            // load all assigned tasks and while joining with task requests, then join with tasks to get specific details
-            // only join tasks that are not opened and is assigned to this worker id
-            var dt = _databaseService.ExecuteQuery(@"
-                SELECT t.TaskName, l.Area, t.AverageFee, tr.Status, tr.id as RequestID,
-                       ta.StartedTime, ta.ActualTimeSlot, ta.ActualDurationMinutes, ta.Status as AssignmentStatus
-                FROM TaskAssignments ta
-                JOIN TaskRequests tr ON ta.RequestID = tr.id
-                JOIN Tasks t ON tr.TaskID = t.id
-                JOIN Locations l ON tr.LocationID = l.id
-                WHERE ta.WorkerID = @W AND tr.Status <> 'open'",
-                cmd => cmd.Parameters.AddWithValue("@W", workerId));
-
-            foreach (DataRow row in dt.Rows)
-            {
-                string fee = row["AverageFee"] == DBNull.Value ? "" : Convert.ToDecimal(row["AverageFee"]).ToString("F2");
-                string startedTime = row["StartedTime"] == DBNull.Value ? "" : Convert.ToDateTime(row["StartedTime"]).ToString("g");
-                string duration = string.Empty;
-                if (!(row["ActualDurationMinutes"] is DBNull) && row["ActualDurationMinutes"] != null)
-                {
-                    duration = row["ActualDurationMinutes"].ToString() ?? string.Empty;
-                }
-                // Use the assignment status (from TaskAssignments) for the UI, not the request status
-                string status = row["AssignmentStatus"]?.ToString() ?? row["Status"].ToString() ?? "";
-                var item = new ListViewItem(new[]
-                {
-                    row["TaskName"].ToString() ?? "",
-                    row["Area"].ToString() ?? "",
-                    fee,
-                    status,
-                    row["RequestID"].ToString() ?? "",
-                    startedTime,
-                    duration
-                });
-                lvAssigned.Items.Add(item);
-            }
-        }
-
         private void SetupWorkerAssignedTasksTab(TabPage tab)
         {
             AddBackToMenuButton(tab);
@@ -1393,7 +1352,7 @@ namespace TaskWorkerApp
 
                         if (success)
                         {
-                            LoadAssignedTasks(lvAssigned); // Reload from DB to show updated duration/status
+                            LoadAssignedTasksWithRating(lvAssigned); // Reload from DB to show updated duration/status
                             btnComplete.Enabled = false;
                             UpdateTotalMoney(); // Update total money after completion
                             MessageBox.Show("Task marked as completed successfully.",
@@ -1424,7 +1383,7 @@ namespace TaskWorkerApp
                         bool success = _workerService.MarkTaskAsInProgress(requestId, _loggedInWorkerId.Value);
                         if (success)
                         {
-                            LoadAssignedTasks(lvAssigned); // Reload from DB to show updated StartedTime
+                            LoadAssignedTasksWithRating(lvAssigned); // Reload from DB to show updated StartedTime
                             btnInProgress.Enabled = false;
                             MessageBox.Show("Task marked as in progress.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
