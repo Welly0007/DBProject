@@ -114,7 +114,7 @@ namespace TaskWorkerApp.Services
             }
         }
 
-        // New overload: get available workers for a specific time slot
+        // Get available workers for a specific time slot
         public List<int> GetAvailableWorkersForTask(int taskId, int locationId, int timeSlotId)
         {
             // Get the specialty required for the task
@@ -153,9 +153,6 @@ namespace TaskWorkerApp.Services
             return result;
         }
 
-        /// <summary>
-        /// Returns a list of time slot IDs that have at least one available worker for the given task and location.
-        /// </summary>
         public List<int> GetAvailableTimeSlotsForTask(int taskId, int locationId)
         {
             // Get the specialty required for the task

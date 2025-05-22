@@ -29,7 +29,11 @@ namespace TaskWorkerApp.Services
             // Ensure the column name is correctly defined
             if (result.Columns.Contains("id") && !result.Columns.Contains("Id"))
             {
-                result.Columns["id"].ColumnName = "Id";
+                var idColumn = result.Columns["id"];
+                if (idColumn != null)
+                {
+                    idColumn.ColumnName = "Id";
+                }
             }
 
             return result;

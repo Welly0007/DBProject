@@ -743,19 +743,19 @@ namespace TaskWorkerApp
                 {
                     timeTaken = row["ActualDurationMinutes"].ToString() ?? string.Empty;
                 }
-                string rating = row["ClientRating"] == DBNull.Value ? "Not rated" : row["ClientRating"].ToString();
+                string rating = (row["ClientRating"] == DBNull.Value || row["ClientRating"] == null) ? "Not rated" : (row["ClientRating"].ToString() ?? "Not rated");
                 string feedback = row["Feedback"]?.ToString() ?? "";
 
-                var item = new ListViewItem(new[]
+                var item = new ListViewItem(new string[]
                 {
-                    row["TaskName"].ToString() ?? "",
-                    row["Area"].ToString() ?? "",
-                    slot,
-                    status,
-                    worker,
-                    requestedOn,
-                    timeTaken,
-                    rating // Add rating to the list view
+                    (row["TaskName"]?.ToString() ?? ""),
+                    (row["Area"]?.ToString() ?? ""),
+                    (slot ?? ""),
+                    (status ?? ""),
+                    (worker ?? ""),
+                    (requestedOn ?? ""),
+                    (timeTaken ?? ""),
+                    (rating ?? "") // Add rating to the list view
                 })
                 {
                     Tag = feedback // Store feedback in the Tag property
