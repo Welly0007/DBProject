@@ -884,7 +884,7 @@ namespace TaskWorkerApp
                     MessageBox.Show("Could not find worker assignment for this request.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                // Show rating dialog
+
                 Form rateForm = new Form { Text = $"Rate Worker: {workerName}", Size = new System.Drawing.Size(350, 250), StartPosition = FormStartPosition.CenterParent };
                 Label lbl = new Label { Text = "Rating (1-5):", Location = new System.Drawing.Point(20, 20) };
                 NumericUpDown nud = new NumericUpDown { Minimum = 1, Maximum = 5, Location = new System.Drawing.Point(120, 20), Width = 50 };
@@ -919,14 +919,14 @@ namespace TaskWorkerApp
 
             tab.Controls.Add(btnShowFeedback);
 
-            // Add controls to tab
+
             tab.Controls.Add(lblTitle);
             tab.Controls.Add(lvRequests);
             tab.Controls.Add(btnShowFeedback);
             tab.Controls.Add(btnRateWorker);
         }
 
-        // Class for task items in the dropdown
+
         private class TaskItem
         {
             public int Id { get; }
@@ -977,14 +977,14 @@ namespace TaskWorkerApp
             if (cmbLocations.Items.Count > 0)
                 cmbLocations.SelectedIndex = 0;
 
-            // Time slot selection
+
             Label lblTimeSlot = new Label { Text = "Time Slot:", Location = new System.Drawing.Point(20, 100) };
             ComboBox cmbTimeSlots = new ComboBox { Location = new System.Drawing.Point(150, 100), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
 
             // Label to show available workers
             Label lblAvailableWorkers = new Label { Text = "Available Workers:", Location = new System.Drawing.Point(20, 140), Width = 370, Height = 40, AutoSize = false };
 
-            // Helper to load available time slots for the selected task/location
+
             void LoadAvailableTimeSlots()
             {
                 cmbTimeSlots.Items.Clear();
@@ -1019,7 +1019,7 @@ namespace TaskWorkerApp
                 }
                 else
                 {
-                    // Get worker names
+
                     var allWorkers = _workerService.GetAllWorkers();
                     var names = allWorkers.Rows.Cast<DataRow>()
                         .Where(r => workerIds.Contains(Convert.ToInt32(r["Id"])))
@@ -1072,7 +1072,7 @@ namespace TaskWorkerApp
                         MessageBox.Show("Task request submitted, but no available worker was found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     requestForm.Close();
-                    // Refresh 'My Requests' tab if it is open
+
                     if (tabControl != null)
                     {
                         foreach (TabPage tab in tabControl.TabPages)
@@ -1117,7 +1117,7 @@ namespace TaskWorkerApp
             }
         }
 
-        // Helper for checked list box
+
         private class ComboBoxItem
         {
             public string Text { get; }
@@ -1230,10 +1230,10 @@ namespace TaskWorkerApp
             lvAssigned.Columns.Add("Request ID", 0);
             lvAssigned.Columns.Add("Started Time", 150);
             lvAssigned.Columns.Add("Duration (min)", 120);
-            lvAssigned.Columns.Add("Rating", 80); // Add rating column
+            lvAssigned.Columns.Add("Rating", 80);
             LoadAssignedTasksWithRating(lvAssigned);
 
-            // Add label for total money earned
+
             Label lblTotalMoney = new Label
             {
                 Text = "Total Money Earned: $0.00",
@@ -1294,7 +1294,7 @@ namespace TaskWorkerApp
                 Enabled = false
             };
 
-            // Enable/disable buttons based on selection and status
+
             lvAssigned.SelectedIndexChanged += (s, e) =>
             {
                 if (lvAssigned.SelectedItems.Count > 0)
@@ -1311,7 +1311,7 @@ namespace TaskWorkerApp
                         cmd => cmd.Parameters.AddWithValue("@RequestId", requestId));
                     bool isRated = dt.Rows.Count > 0 && Convert.ToInt32(dt.Rows[0]["RatingExists"]) > 0;
                     btnRateClient.Enabled = (status == "completed" && !isRated);
-                    // Enable feedback button if feedback exists and SubItems count is valid
+
                     bool hasRatingColumn = lvAssigned.SelectedItems[0].SubItems.Count > 7;
                     string rating = hasRatingColumn ? lvAssigned.SelectedItems[0].SubItems[7].Text : "Not rated";
                     btnShowFeedback.Enabled = hasRatingColumn && rating != "Not rated" && lvAssigned.SelectedItems[0].Tag != null && !string.IsNullOrEmpty(lvAssigned.SelectedItems[0].Tag?.ToString());
@@ -1334,14 +1334,14 @@ namespace TaskWorkerApp
                 }
             };
 
-            // Handle completion button click
+
             btnComplete.Click += (s, e) =>
             {
                 if (lvAssigned.SelectedItems.Count > 0)
                 {
                     var selectedItem = lvAssigned.SelectedItems[0];
                     string taskName = selectedItem.SubItems[0].Text;
-                    int requestId = int.Parse(selectedItem.SubItems[4].Text); // Get the request ID
+                    int requestId = int.Parse(selectedItem.SubItems[4].Text);
 
                     if (MessageBox.Show($"Are you sure you want to mark '{taskName}' as completed?",
                                         "Confirm Task Completion",
@@ -1352,9 +1352,9 @@ namespace TaskWorkerApp
 
                         if (success)
                         {
-                            LoadAssignedTasksWithRating(lvAssigned); // Reload from DB to show updated duration/status
+                            LoadAssignedTasksWithRating(lvAssigned);
                             btnComplete.Enabled = false;
-                            UpdateTotalMoney(); // Update total money after completion
+                            UpdateTotalMoney();
                             MessageBox.Show("Task marked as completed successfully.",
                                             "Success",
                                             MessageBoxButtons.OK,
@@ -1371,7 +1371,7 @@ namespace TaskWorkerApp
                 }
             };
 
-            // Handle in-progress button click
+
             btnInProgress.Click += (s, e) =>
             {
                 if (lvAssigned.SelectedItems.Count > 0)
@@ -1383,7 +1383,7 @@ namespace TaskWorkerApp
                         bool success = _workerService.MarkTaskAsInProgress(requestId, _loggedInWorkerId.Value);
                         if (success)
                         {
-                            LoadAssignedTasksWithRating(lvAssigned); // Reload from DB to show updated StartedTime
+                            LoadAssignedTasksWithRating(lvAssigned);
                             btnInProgress.Enabled = false;
                             MessageBox.Show("Task marked as in progress.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
@@ -1399,15 +1399,15 @@ namespace TaskWorkerApp
                 }
             };
 
-            // Handle rate client button click
+
             btnRateClient.Click += (s, e) =>
             {
                 if (lvAssigned.SelectedItems.Count > 0)
                 {
                     var selectedItem = lvAssigned.SelectedItems[0];
-                    int requestId = int.Parse(selectedItem.SubItems[4].Text); // Get the request ID
+                    int requestId = int.Parse(selectedItem.SubItems[4].Text);
 
-                    // Open a form to rate the client
+
                     Form rateForm = new Form
                     {
                         Text = "Rate Client",
@@ -1477,7 +1477,8 @@ namespace TaskWorkerApp
             tab.Controls.Add(btnShowFeedback);
         }
 
-        // New: LoadAssignedTasksWithRating
+        // load all assigned tasks while joining with task requests, then join with tasks to get specific details for each task
+        //left join with worker ratings to get rating and feedback, so that even if it is not rated, it will still show the task
         private void LoadAssignedTasksWithRating(ListView lvAssigned)
         {
             lvAssigned.Items.Clear();
@@ -1515,10 +1516,10 @@ namespace TaskWorkerApp
                     row["RequestID"].ToString() ?? "",
                     startedTime,
                     duration,
-                    rating // Add rating to the list view
+                    rating
                 })
                 {
-                    Tag = feedback // Store feedback in the Tag property
+                    Tag = feedback
                 };
                 lvAssigned.Items.Add(item);
             }
