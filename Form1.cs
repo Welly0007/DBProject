@@ -1305,7 +1305,7 @@ namespace TaskWorkerApp
                     btnInProgress.Enabled = (status == "assigned" || status == "scheduled");
                     // Check if the task is completed and not rated
                     var dt = _databaseService.ExecuteQuery(@"
-                        SELECT COUNT(1) AS RatingExists
+                        SELECT COUNT(*) AS RatingExists
                         FROM ClientRatings cr
                         WHERE cr.RequestID = @RequestId",
                         cmd => cmd.Parameters.AddWithValue("@RequestId", requestId));
