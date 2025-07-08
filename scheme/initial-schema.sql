@@ -26,14 +26,6 @@ CREATE TABLE Specialties (
     [Name] VARCHAR(100) NOT NULL
 );
 
--- Create junction table for Worker-Specialty many-to-many relationship
--- CREATE TABLE WorkerSpecialty (
---     WorkerID INT NOT NULL,
---     SpecialtyID INT NOT NULL,
---     PRIMARY KEY (WorkerID, SpecialtyID),
---     FOREIGN KEY (WorkerID) REFERENCES Workers(id),
---     FOREIGN KEY (SpecialtyID) REFERENCES Specialties(id)
--- );
 
 -- Create TimeSlot table
 CREATE TABLE TimeSlots (
@@ -177,18 +169,9 @@ VALUES ('Test Client', '1234567890', 'client@test.com', '123 Test St', 'VISA 111
 INSERT INTO Workers (Name, Phone, Email)
 VALUES ('Test Worker', '0987654321', 'worker@test.com');
 
--- Connect test worker with specialties, locations, and time slots
--- Assume: Plumbing = 1, Electrical = 2, Cleaning = 3, Painting = 4
---         Downtown = 1, Suburbs = 2, Industrial Zone = 3, University District = 4
---         TimeSlot IDs: 1, 2, 3, 4
-
--- Assign specialties (Plumbing and Electrical) to test worker
--- INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 1);
--- INSERT INTO WorkerSpecialty (WorkerID, SpecialtyID) VALUES (1, 2);
 
 -- Assign availability for test worker: all combinations of specialties, locations, and time slots
 INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (1, 1, 1, 1);
 INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (1, 2, 1, 1);
 INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (1, 1, 2, 2);
 INSERT INTO WorkerAvailability (WorkerID, TimeSlotID, LocationID, SpecialtyID) VALUES (1, 2, 2, 2);
--- Add more as needed for your test coverage

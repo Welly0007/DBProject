@@ -896,6 +896,7 @@ namespace TaskWorkerApp
                     decimal ratingVal = nud.Value;
                     string feedback = txtFb.Text;
                     // Save to WorkerRatings with correct RequestID 
+                    // FOCUS INSERT1
                     _databaseService.ExecuteNonQuery(@"INSERT INTO WorkerRatings (WorkerID, TaskID, RequestID, RatingValue, Date, Feedback) VALUES (@W, @T, @RId, @R, GETDATE(), @F)", cmd =>
                     {
                         cmd.Parameters.AddWithValue("@W", workerId);
