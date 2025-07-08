@@ -1,6 +1,6 @@
-# Task Worker Management Application
+# TaskConnect - Full-Stack Task Management System
 
-A comprehensive Windows Forms application for managing workers, clients, tasks, and task assignments with a complete rating system. Built with C# and SQL Server.
+A comprehensive full-stack application demonstrating advanced database design and backend development principles. Built with C# Windows Forms frontend and robust SQL Server backend, this system showcases complete database lifecycle management, complex relational data modeling, and enterprise-level data operations.
 
 ## Prerequisites
 
