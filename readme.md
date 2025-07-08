@@ -20,51 +20,27 @@ A comprehensive Windows Forms application for managing workers, clients, tasks, 
     - C# Dev Kit
     - .NET Core Tools
 
-## Setup Instructions
+## Quick Setup
 
-### Step 1: Set Up the Database
+### 1. Database Setup
+1. Open SSMS and connect to your SQL Server
+2. Create database `TaskWorkerDB`
+3. Execute `initial-schema.sql` from the `scheme` directory
+4. **Keep SQL Server running during use**
 
-1. Open SQL Server Management Studio (SSMS)
-2. Connect to your SQL Server instance
-3. Create a new database named `TaskWorkerDB`
-4. Right-click on `TaskWorkerDB` and click "New Query"
-5. Open the `initial-schema.sql` file from the `scheme` directory and execute it
-6. **NOTE: KEEP THE SERVER RUNNING WHEN USING THE SOFTWARE**
-
-### Step 2: Configure the Project
-
-1. Extract/clone the project to your local machine
-2. Open the project folder in Visual Studio Code or your preferred IDE
-3. **Important**: Modify the connection string in `Form1.cs` to match your SQL Server:
-   - Locate this line (around line 15):
-     ```csharp
-     private readonly string _connectionString = 
-         "Server=WELLY-PC\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;";
-     ```
-   - Change `WELLY-PC\\SQLEXPRESS` to your SQL Server instance name
-
-### Step 3: Install Required Packages
-
-1. Open a terminal/command prompt in the project directory
-2. Run the following command to restore packages:
+### 2. Project Configuration
+1. Clone/extract project to local machine
+2. Update connection string in `Form1.cs` (line ~15):
+   ```csharp
+   "Server=YOUR_SERVER_NAME\\SQLEXPRESS;Database=TaskWorkerDB;Trusted_Connection=True;TrustServerCertificate=True;"
    ```
-   dotnet restore
-   ```
-3. If needed, manually install the Microsoft.Data.SqlClient package:
-   ```
-   dotnet add package Microsoft.Data.SqlClient
-   ```
-
-### Step 4: Build and Run the Application
-
-1. Build the project:
-   ```
-   dotnet build
-   ```
-2. Run the application:
-   ```
-   dotnet run
-   ```
+   **Replace YOUR_SERVER_NAME with your SQL Server instance name**
+3. Build & run
+```csharp
+  dotnet restore
+  dotnet build
+  dotnet run
+  ```
 
 ## Application Features
 
